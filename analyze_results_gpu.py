@@ -552,6 +552,14 @@ if not all_files:
 print(f"Found {len(all_files)} files to analyze.")
 write_to_log(f"Found {len(all_files)} files to analyze.")
 
+# Sort CSV files for consistent order
+all_files.sort()
+
+# Limit to first 25 CSV files
+if len(all_files) > 25:
+    print(f"Limiting analysis to first 25 files out of {len(all_files)} total files")
+    all_files = all_files[:25]
+
 # Import RMM for memory management
 try:
     import rmm
@@ -1089,15 +1097,97 @@ if has_cudf and has_rmm:
 write_to_log("\n=== Basic Statistics (Grouped by Algo & Bucket Size) ===\n")
 print("\n=== Basic Statistics (Grouped by Algo & Bucket Size) ===\n")
 
-# Calculate basic stats for each algorithm and bucket size
-# basic_stats_results already initialized earlier
+# Calculate basic stats for each algorithm and bucket size - but using chunking
+# to avoid memory issues, similar to the per-file approach
+
+# Get all unique algorithm/bucket size combinations
+algo_bucket_pairs = []
+for result in csv_results:
+    csv_df = result['dataframe']
+    algos = csv_df['algorithm'].unique()
+    buckets = csv_df['bucket_size'].unique()
+    
+    # Handle both cuDF and pandas Series
+    if hasattr(algos, 'to_pandas'):
+        algos = algos.to_pandas()
+    if hasattr(buckets, 'to_pandas'):
+        buckets = buckets.to_pandas()
+        
+    for algo in algos:
+        for bucket in buckets:
+            algo_bucket_pairs.append((algo, bucket))
+
+# Remove duplicates
+algo_bucket_pairs = list(set(algo_bucket_pairs))
+write_to_log(f"Found {len(algo_bucket_pairs)} unique algorithm/bucket size combinations for analysis")
+print(f"Found {len(algo_bucket_pairs)} unique algorithm/bucket size combinations for analysis")
+
+# Process each algorithm/bucket combination separately
+for algo_name, b_size in algo_bucket_pairs:
+    print(f"Processing global stats for {algo_name}, bucket size {b_size}...")
+    write_to_log(f"Processing global stats for {algo_name}, bucket size {b_size}...")
+    
+    # Filter each dataframe before combining them to reduce memory usage
+    filtered_dfs = []
+    for result in csv_results:
+        csv_df = result['dataframe']
+        
+        try:
+            # Check if this CSV contains this algo/bucket combo
+            if algo_name in csv_df['algorithm'].unique() and b_size in csv_df['bucket_size'].unique():
+                # Filter the dataframe first to only include this algo/bucket
+                if isinstance(csv_df, cudf.DataFrame):
+                    # Using cuDF
+                    subset = csv_df[(csv_df['algorithm'] == algo_name) & (csv_df['bucket_size'] == b_size)]
+                else:
+                    # Using pandas
+                    subset = csv_df[(csv_df['algorithm'] == algo_name) & (csv_df['bucket_size'] == b_size)]
+                
+                if len(subset) > 0:
+                    filtered_dfs.append(subset)
+                    result_msg = f"  {result['csv_name']}: Algorithm {algo_name}, Bucket Size {b_size}, Rows: {len(subset)}"
+                    print(result_msg)
+                    write_to_log(result_msg)
+        except Exception as e:
+            print(f"Error filtering {result['csv_name']} for {algo_name}/{b_size}: {e}")
+            write_to_log(f"Error filtering {result['csv_name']} for {algo_name}/{b_size}: {e}")
+    
+    # Now process this specific algo/bucket combo
+    if filtered_dfs:
+        try:
+            # Combine filtered dataframes
+            if has_cudf and all(isinstance(df, cudf.DataFrame) for df in filtered_dfs):
+                # Use cuDF concat for GPU acceleration if all are cuDF
+                filtered_df = cudf.concat(filtered_dfs, ignore_index=True)
+            else:
+                # Convert any cuDF dataframes to pandas first
+                pandas_filtered = [df.to_pandas() if isinstance(df, cudf.DataFrame) else df for df in filtered_dfs]
+                filtered_df = pd.concat(pandas_filtered, ignore_index=True)
+            
+            # Calculate statistics just for this specific algo/bucket
+            stats = calculate_basic_stats(filtered_df, algo_name, b_size)
+            
+            # Free memory immediately
+            del filtered_df
+            del filtered_dfs
+            gc.collect()
+            if has_rmm and has_cudf:
+                try:
+                    rmm.reinitialize()
+                except Exception:
+                    pass
+            
+            if stats:
+                basic_stats_results.append(stats)
+        except Exception as e:
+            print(f"Error processing combined stats for {algo_name}/{b_size}: {e}")
+            write_to_log(f"Error processing combined stats for {algo_name}/{b_size}: {e}")
+
+# Find which CSV files contain this algorithm and bucket size
 for name, group in combined_df.groupby(['algorithm', 'bucket_size']):
     algo_name, b_size = name
-    stats = calculate_basic_stats(combined_df, algo_name, b_size)
+    stats = next((s for s in basic_stats_results if s['algorithm'] == algo_name and s['bucket_size'] == b_size), None)
     if stats:
-        basic_stats_results.append(stats)
-        
-        # Find which CSV files contain this algorithm and bucket size
         for result in csv_results:
             csv_df = result['dataframe']
             if algo_name in csv_df['algorithm'].unique() and b_size in csv_df['bucket_size'].unique():
@@ -1151,58 +1241,113 @@ if basic_stats_results:
 write_to_log("\nAnalyzing normalized position distributions...")
 print("\nAnalyzing normalized position distributions...")
 
-# Calculate distribution stats for each algorithm
-# Convert cuDF Series to a format that can be iterated over
-algo_names = combined_df['algorithm'].unique().to_pandas() if isinstance(combined_df, cudf.DataFrame) else combined_df['algorithm'].unique()
-for algo_name in algo_names:
-    algo_data = combined_df[combined_df['algorithm'] == algo_name]
-    if 'normalized' in algo_data.columns:
-        norm_mean = algo_data['normalized'].mean()
-        norm_median = algo_data['normalized'].median()
-        norm_std = algo_data['normalized'].std()
-        norm_min = algo_data['normalized'].min()
-        norm_max = algo_data['normalized'].max()
+# Get unique algorithm names across all CSV files
+unique_algos = set()
+for result in csv_results:
+    csv_df = result['dataframe']
+    if 'algorithm' in csv_df.columns and 'normalized' in csv_df.columns:
+        if isinstance(csv_df, cudf.DataFrame):
+            algos = csv_df['algorithm'].unique().to_pandas()
+        else:
+            algos = csv_df['algorithm'].unique()
+        unique_algos.update(algos)
+
+# Process each algorithm separately
+for algo_name in unique_algos:
+    print(f"Processing normalized position distribution for {algo_name}...")
+    write_to_log(f"Processing normalized position distribution for {algo_name}...")
+    
+    # Filter each dataframe and collect statistics
+    filtered_dfs = []
+    for result in csv_results:
+        csv_df = result['dataframe']
         
-        # Find which CSV files contain this algorithm
-        for result in csv_results:
-            csv_df = result['dataframe']
-            if algo_name in csv_df['algorithm'].unique():
-                # Write stats to this CSV's analysis file
-                write_to_csv_analysis(result['output_dir'], "\n=== Normalized Position Distribution ===\n")
-                write_to_csv_analysis(result['output_dir'], f"Normalized position distribution for {algo_name}:")
-                write_to_csv_analysis(result['output_dir'], f"  Mean: {norm_mean:.4f}")
-                write_to_csv_analysis(result['output_dir'], f"  Median: {norm_median:.4f}")
-                write_to_csv_analysis(result['output_dir'], f"  Std Dev: {norm_std:.4f}")
-                write_to_csv_analysis(result['output_dir'], f"  Min: {norm_min:.4f}")
-                write_to_csv_analysis(result['output_dir'], f"  Max: {norm_max:.4f}")
+        try:
+            # Check if this CSV contains this algorithm and normalized column
+            if 'algorithm' in csv_df.columns and 'normalized' in csv_df.columns and algo_name in csv_df['algorithm'].unique():
+                # Filter the dataframe
+                if isinstance(csv_df, cudf.DataFrame):
+                    subset = csv_df[csv_df['algorithm'] == algo_name]
+                else:
+                    subset = csv_df[csv_df['algorithm'] == algo_name]
                 
-                # Save distribution stats to CSV file in this CSV's directory
-                dist_stats = {
-                    'algorithm': [algo_name],
-                    'mean': [norm_mean],
-                    'median': [norm_median],
-                    'std_dev': [norm_std],
-                    'min': [norm_min],
-                    'max': [norm_max]
-                }
-                dist_df = pd.DataFrame(dist_stats)
-                dist_df.to_csv(os.path.join(result['csv_dir'], "normalized_distribution.csv"), index=False)
-        
-        # Also write to main log
-        write_to_log(f"\nNormalized position distribution for {algo_name}:")
-        write_to_log(f"  Mean: {norm_mean:.4f}")
-        write_to_log(f"  Median: {norm_median:.4f}")
-        write_to_log(f"  Std Dev: {norm_std:.4f}")
-        write_to_log(f"  Min: {norm_min:.4f}")
-        write_to_log(f"  Max: {norm_max:.4f}")
-        
-        # Print to console
-        print(f"\nNormalized position distribution for {algo_name}:")
-        print(f"  Mean: {norm_mean:.4f}")
-        print(f"  Median: {norm_median:.4f}")
-        print(f"  Std Dev: {norm_std:.4f}")
-        print(f"  Min: {norm_min:.4f}")
-        print(f"  Max: {norm_max:.4f}")
+                if len(subset) > 0:
+                    filtered_dfs.append(subset)
+        except Exception as e:
+            print(f"Error filtering normalized data for {result['csv_name']} ({algo_name}): {e}")
+            write_to_log(f"Error filtering normalized data for {result['csv_name']} ({algo_name}): {e}")
+    
+    # Process this algorithm's distribution if we have data
+    if filtered_dfs:
+        try:
+            # Combine filtered dataframes
+            if has_cudf and all(isinstance(df, cudf.DataFrame) for df in filtered_dfs):
+                filtered_df = cudf.concat(filtered_dfs, ignore_index=True)
+            else:
+                pandas_filtered = [df.to_pandas() if isinstance(df, cudf.DataFrame) else df for df in filtered_dfs]
+                filtered_df = pd.concat(pandas_filtered, ignore_index=True)
+            
+            # Calculate distribution statistics
+            norm_mean = filtered_df['normalized'].mean()
+            norm_median = filtered_df['normalized'].median()
+            norm_std = filtered_df['normalized'].std()
+            norm_min = filtered_df['normalized'].min()
+            norm_max = filtered_df['normalized'].max()
+            
+            # Find which CSV files contain this algorithm and write results
+            for result in csv_results:
+                csv_df = result['dataframe']
+                if 'algorithm' in csv_df.columns and algo_name in csv_df['algorithm'].unique():
+                    # Write stats to this CSV's analysis file
+                    write_to_csv_analysis(result['output_dir'], "\n=== Normalized Position Distribution ===\n")
+                    write_to_csv_analysis(result['output_dir'], f"Normalized position distribution for {algo_name}:")
+                    write_to_csv_analysis(result['output_dir'], f"  Mean: {norm_mean:.4f}")
+                    write_to_csv_analysis(result['output_dir'], f"  Median: {norm_median:.4f}")
+                    write_to_csv_analysis(result['output_dir'], f"  Std Dev: {norm_std:.4f}")
+                    write_to_csv_analysis(result['output_dir'], f"  Min: {norm_min:.4f}")
+                    write_to_csv_analysis(result['output_dir'], f"  Max: {norm_max:.4f}")
+                    
+                    # Save distribution stats to CSV file in this CSV's directory
+                    dist_stats = {
+                        'algorithm': [algo_name],
+                        'mean': [norm_mean],
+                        'median': [norm_median],
+                        'std_dev': [norm_std],
+                        'min': [norm_min],
+                        'max': [norm_max]
+                    }
+                    dist_df = pd.DataFrame(dist_stats)
+                    dist_df.to_csv(os.path.join(result['csv_dir'], "normalized_distribution.csv"), index=False)
+            
+            # Also write to main log
+            write_to_log(f"\nNormalized position distribution for {algo_name}:")
+            write_to_log(f"  Mean: {norm_mean:.4f}")
+            write_to_log(f"  Median: {norm_median:.4f}")
+            write_to_log(f"  Std Dev: {norm_std:.4f}")
+            write_to_log(f"  Min: {norm_min:.4f}")
+            write_to_log(f"  Max: {norm_max:.4f}")
+            
+            # Print to console
+            print(f"\nNormalized position distribution for {algo_name}:")
+            print(f"  Mean: {norm_mean:.4f}")
+            print(f"  Median: {norm_median:.4f}")
+            print(f"  Std Dev: {norm_std:.4f}")
+            print(f"  Min: {norm_min:.4f}")
+            print(f"  Max: {norm_max:.4f}")
+            
+            # Free memory
+            del filtered_df
+            del filtered_dfs
+            gc.collect()
+            if has_rmm and has_cudf:
+                try:
+                    rmm.reinitialize()
+                except Exception:
+                    pass
+                    
+        except Exception as e:
+            print(f"Error processing normalized position distribution for {algo_name}: {e}")
+            write_to_log(f"Error processing normalized position distribution for {algo_name}: {e}")
 
 # Check monotonicity of fairness score
 write_to_log("\nChecking monotonicity of fairness score...")
@@ -1211,35 +1356,90 @@ print("\nChecking monotonicity of fairness score...")
 # Run monotonicity check only if columns exist
 # all_monotonicity_list already initialized earlier
 required_mono_cols = ['user_id', 'user_token_sum', 'normalized', 'algorithm', 'bucket_size']
-if all(col in combined_df.columns for col in required_mono_cols):
+
+# Check if any dataframe has the required columns
+has_required_cols = False
+for result in csv_results:
+    csv_df = result['dataframe']
+    if all(col in csv_df.columns for col in required_mono_cols):
+        has_required_cols = True
+        break
+
+if has_required_cols:
     write_to_log("\nChecking monotonicity...")
     print("\nChecking monotonicity...")
     
-    # Create a list of tasks for monotonicity checking
-    monotonicity_tasks = []
-    
-    # Convert cuDF Series to a format that can be iterated over
-    algo_names = combined_df['algorithm'].unique().to_pandas() if isinstance(combined_df, cudf.DataFrame) else combined_df['algorithm'].unique()
-    bucket_sizes = combined_df['bucket_size'].unique().to_pandas() if isinstance(combined_df, cudf.DataFrame) else sorted(combined_df['bucket_size'].unique())
-    
-    for algo_name in algo_names:
-        for bucket_size in sorted(bucket_sizes):
-            monotonicity_tasks.append((combined_df, algo_name, bucket_size))
-    
-    # Run monotonicity checks
-    monotonicity_start_time = time.time()
-    # Always run sequentially
-    for task in monotonicity_tasks:
-        result = check_monotonicity(*task)
-        all_monotonicity_list.append(result)
+    # Process each algorithm/bucket combination separately (using the same pairs from earlier)
+    for algo_name, b_size in algo_bucket_pairs:
+        print(f"Processing monotonicity for {algo_name}, bucket size {b_size}...")
+        write_to_log(f"Processing monotonicity for {algo_name}, bucket size {b_size}...")
         
-        if isinstance(result, dict) and 'non_monotonic_pct' in result:
-            # Log to main log file
-            write_to_log(f"  {result['algorithm']} (Bucket: {result['bucket_size']}): {result['non_monotonic_pct']:.2f}% non-monotonic ({result['non_monotonic_pairs']}/{result['total_pairs']} pairs)")
-            print(f"  {result['algorithm']} (Bucket: {result['bucket_size']}): {result['non_monotonic_pct']:.2f}% non-monotonic ({result['non_monotonic_pairs']}/{result['total_pairs']} pairs)")
-        else:
-            write_to_log(f"  Monotonicity check: No valid data available")
-            print(f"  Monotonicity check: No valid data available")
+        # Filter each dataframe before combining them to reduce memory usage
+        filtered_dfs = []
+        for result in csv_results:
+            csv_df = result['dataframe']
+            
+            try:
+                # Check if this CSV contains this algo/bucket combo and required columns
+                if (algo_name in csv_df['algorithm'].unique() and 
+                    b_size in csv_df['bucket_size'].unique() and
+                    all(col in csv_df.columns for col in required_mono_cols)):
+                    
+                    # Filter the dataframe first to only include this algo/bucket
+                    if isinstance(csv_df, cudf.DataFrame):
+                        # Using cuDF
+                        subset = csv_df[(csv_df['algorithm'] == algo_name) & 
+                                       (csv_df['bucket_size'] == b_size)]
+                    else:
+                        # Using pandas
+                        subset = csv_df[(csv_df['algorithm'] == algo_name) & 
+                                       (csv_df['bucket_size'] == b_size)]
+                    
+                    if len(subset) > 0:
+                        filtered_dfs.append(subset)
+                        result_msg = f"  Checking monotonicity in {result['csv_name']} for {algo_name}/{b_size}"
+                        write_to_log(result_msg)
+            except Exception as e:
+                print(f"Error filtering for monotonicity {result['csv_name']} for {algo_name}/{b_size}: {e}")
+                write_to_log(f"Error filtering for monotonicity {result['csv_name']} for {algo_name}/{b_size}: {e}")
+        
+        # Now process this specific algo/bucket combo
+        if filtered_dfs:
+            try:
+                # Combine filtered dataframes
+                if has_cudf and all(isinstance(df, cudf.DataFrame) for df in filtered_dfs):
+                    # Use cuDF concat for GPU acceleration if all are cuDF
+                    filtered_df = cudf.concat(filtered_dfs, ignore_index=True)
+                else:
+                    # Convert any cuDF dataframes to pandas first
+                    pandas_filtered = [df.to_pandas() if isinstance(df, cudf.DataFrame) else df for df in filtered_dfs]
+                    filtered_df = pd.concat(pandas_filtered, ignore_index=True)
+                
+                # Calculate monotonicity just for this specific algo/bucket
+                mono_result = check_monotonicity(filtered_df, algo_name, b_size)
+                all_monotonicity_list.append(mono_result)
+                
+                if isinstance(mono_result, dict) and 'non_monotonic_pct' in mono_result:
+                    # Log to main log file
+                    msg = f"  {mono_result['algorithm']} (Bucket: {mono_result['bucket_size']}): {mono_result['non_monotonic_pct']:.2f}% non-monotonic ({mono_result['non_monotonic_pairs']}/{mono_result['total_pairs']} pairs)"
+                    write_to_log(msg)
+                    print(msg)
+                else:
+                    write_to_log(f"  Monotonicity check: No valid data available for {algo_name}/{b_size}")
+                    print(f"  Monotonicity check: No valid data available for {algo_name}/{b_size}")
+                
+                # Free memory immediately
+                del filtered_df
+                del filtered_dfs
+                gc.collect()
+                if has_rmm and has_cudf:
+                    try:
+                        rmm.reinitialize()
+                    except Exception:
+                        pass
+            except Exception as e:
+                print(f"Error processing monotonicity for {algo_name}/{b_size}: {e}")
+                write_to_log(f"Error processing monotonicity for {algo_name}/{b_size}: {e}")
     
     # Log performance metrics for monotonicity checks
     log_performance_metrics(all_monotonicity_list, "Monotonicity Checking")
@@ -1411,12 +1611,23 @@ if adaptive_variants:
     # Compare monotonicity across variants
     write_to_log("\nMonotonicity Comparison:")
     print("\nMonotonicity Comparison:")
-    
-    for algo in adaptive_variants:
-        # Convert bucket sizes to a format that can be iterated over if using cuDF
-        bucket_sizes = combined_df['bucket_size'].unique().to_pandas() if isinstance(combined_df, cudf.DataFrame) else combined_df['bucket_size'].unique()
-        for b_size in sorted(bucket_sizes):
-            # Get weight type
+
+    # Print out all collected monotonicity data
+    if all_monotonicity_list and any(isinstance(item, dict) and 'non_monotonic_pct' in item for item in all_monotonicity_list):
+        # Create a dictionary to organize results by algorithm and bucket size
+        mono_by_algo_bucket = {}
+        
+        # Organize all valid monotonicity results
+        for result in all_monotonicity_list:
+            if isinstance(result, dict) and 'algorithm' in result and 'bucket_size' in result and 'non_monotonic_pct' in result:
+                algo = result['algorithm']
+                bucket = result['bucket_size']
+                key = (algo, bucket)
+                mono_by_algo_bucket[key] = result
+        
+        # Print results for each algorithm/bucket pair that we found
+        for (algo, bucket), result in sorted(mono_by_algo_bucket.items()):
+            # Determine the descriptive weight type
             if 'balanced' in algo:
                 weight_type = "Balanced (0.5/0.5)"
             elif 'fairness' in algo:
@@ -1425,13 +1636,18 @@ if adaptive_variants:
                 weight_type = "Utilization-focused"
             else:
                 weight_type = algo
-                
-            # Get monotonicity for this algorithm and bucket size
-            mono_data = [m for m in all_monotonicity_list if m['algorithm'] == algo and m['bucket_size'] == b_size]
-            if mono_data:
-                non_mono_pct = mono_data[0]['non_monotonic_pct']
-                write_to_log(f"  {weight_type} (Bucket Size {b_size}): {non_mono_pct:.2f}% non-monotonic")
-                print(f"  {weight_type} (Bucket Size {b_size}): {non_mono_pct:.2f}% non-monotonic")
+            
+            # Print result with detailed information
+            non_mono_pct = result['non_monotonic_pct']
+            non_mono_pairs = result['non_monotonic_pairs']
+            total_pairs = result['total_pairs']
+            
+            msg = f"  {weight_type} (Bucket Size {bucket}): {non_mono_pct:.2f}% non-monotonic ({non_mono_pairs}/{total_pairs} pairs)"
+            write_to_log(msg)
+            print(msg)
+    else:
+        write_to_log("  No valid monotonicity data collected for comparison.")
+        print("  No valid monotonicity data collected for comparison.")
     
     # Compare load balance across variants
     write_to_log("\nLoad Balance Comparison:")
