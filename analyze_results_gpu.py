@@ -3,9 +3,20 @@
 try:
     import cudf
     has_cudf = True
+    # Also try to import nvidia-smi for GPU memory monitoring
+    try:
+        import nvidia_smi
+        has_nvidia_smi = True
+    except ImportError:
+        has_nvidia_smi = False
+        print("nvidia-smi not available. GPU memory monitoring disabled.")
 except ImportError:
     has_cudf = False
+    has_nvidia_smi = False
     print("CUDA GPU support not available. Using CPU only.")
+
+# Import gc for memory management
+import gc
 
 import pandas as pd
 import numpy as np
@@ -120,25 +131,117 @@ def analyze_csv_file(filename):
             if not has_cudf:
                 raise ImportError("cuDF not available")
 
-            start_time = time.time()
-            df = cudf.read_csv(filename)
-            load_time = time.time() - start_time
-            msg = f"Loaded with cuDF in {load_time:.4f} seconds"
-            write_to_csv_analysis(csv_output_dir, msg)
-            write_to_log(msg)
+            # First try to load the entire file
+            try:
+                start_time = time.time()
+                df = cudf.read_csv(filename)
+                load_time = time.time() - start_time
+                msg = f"Loaded with cuDF in {load_time:.4f} seconds"
+                write_to_csv_analysis(csv_output_dir, msg)
+                write_to_log(msg)
+                
+                # Log memory usage after successful load
+                import nvidia_smi
+                nvidia_smi.nvmlInit()
+                handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
+                info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+                mem_used_mb = info.used / 1024 / 1024
+                mem_total_mb = info.total / 1024 / 1024
+                mem_msg = f"GPU Memory: Used {mem_used_mb:.2f}MB / Total {mem_total_mb:.2f}MB ({(info.used/info.total)*100:.2f}%)"
+                write_to_csv_analysis(csv_output_dir, mem_msg)
+                write_to_log(mem_msg)
+                nvidia_smi.nvmlShutdown()
+                
+            except Exception as e:
+                # If OOM error, try chunking on GPU
+                err_msg = str(e)
+                if "out of memory" in err_msg.lower() or "cudaErrorMemoryAllocation" in err_msg:
+                    oom_msg = f"GPU out of memory ({err_msg}). Attempting GPU chunking..."
+                    write_to_csv_analysis(csv_output_dir, oom_msg)
+                    write_to_log(oom_msg)
+                    print(oom_msg)
+                    
+                    # First determine number of rows to estimate chunk size
+                    row_count = sum(1 for _ in open(filename, 'r'))
+                    # Cast to pure-Python int for cudf.read_csv - Force Python int
+                    chunk_size = int(max(1, (row_count - 1) // 2))
+                    rows_to_read = int(chunk_size)  # Ensure it's a Python int
+                    
+                    # Debug output to check type
+                    type_info = f"Debug: chunk_size={chunk_size} (type: {type(chunk_size).__name__}), rows_to_read={rows_to_read} (type: {type(rows_to_read).__name__})"
+                    write_to_log(type_info)
+                    print(type_info)
+                    
+                    msg = f"File has approximately {row_count} rows. Processing in chunks of {rows_to_read} rows on GPU."
+                    write_to_csv_analysis(csv_output_dir, msg)
+                    write_to_log(msg)
+                    print(msg)
+                    
+                    # Process first chunk on GPU
+                    start_time = time.time()
+                    first_chunk_start = time.time()
+                    write_to_log(f"Loading first chunk ({rows_to_read} rows) into GPU...")
+                    # Use a simple Python primitive int
+                    first_chunk = cudf.read_csv(
+                        filename,
+                        nrows=rows_to_read
+                    )
+                    first_chunk_time = time.time() - first_chunk_start
+                    write_to_log(f"First chunk loaded in {first_chunk_time:.4f} seconds")
+                    
+                    # Process first chunk and store results
+                    first_results = process_chunk(first_chunk, csv_output_dir, "first chunk")
+                    
+                    # Clear GPU memory before loading second chunk
+                    del first_chunk
+                    gc.collect()
+                    
+                    # Log memory cleanup
+                    write_to_log("Cleared first chunk from GPU memory")
+                    
+                    # Process second chunk on GPU
+                    second_chunk_start = time.time()
+                    write_to_log(f"Loading second chunk (remaining rows) into GPU...")
+                    
+                    # Create skiprows list with explicit int conversion
+                    skip_rows_list = [int(i) for i in range(1, chunk_size+1)]
+                    write_to_log(f"Debug: skiprows list type: {type(skip_rows_list).__name__}, first element type: {type(skip_rows_list[0]).__name__}")
+                    
+                    second_chunk = cudf.read_csv(
+                        filename,
+                        skiprows=skip_rows_list
+                    )
+                    second_chunk_time = time.time() - second_chunk_start
+                    write_to_log(f"Second chunk loaded in {second_chunk_time:.4f} seconds")
+                    
+                    # Process second chunk and store results
+                    second_results = process_chunk(second_chunk, csv_output_dir, "second chunk")
+                    
+                    # Combine results (not the dataframes - we're keeping everything in GPU memory)
+                    df = cudf.concat([first_results, second_chunk], ignore_index=True)
+                    
+                    # Clear second chunk from memory
+                    del second_chunk
+                    gc.collect()
+                    
+                    load_time = time.time() - start_time
+                    msg = f"Loaded and processed with cuDF in chunks: {load_time:.4f} seconds"
+                    write_to_csv_analysis(csv_output_dir, msg)
+                    write_to_log(msg)
+                    print(msg)
+                else:
+                    # Any other cuDF error: log & skip
+                    error_msg = f"ERROR: cuDF failed on {base_name}: {err_msg}"
+                    write_to_csv_analysis(csv_output_dir, error_msg)
+                    write_to_log(error_msg)
+                    print(error_msg)
+                    return None
         except Exception as e:
-            # cuDF failed – if it looks like an OOM, log & skip.  No CPU fallback.
-            err_msg = str(e)
-            if "out of memory" in err_msg.lower() or "cudaErrorMemoryAllocation" in err_msg:
-                oom_msg = f"SKIPPED {base_name}: GPU out of memory ({err_msg})"
-                write_to_csv_analysis(csv_output_dir, oom_msg)
-                write_to_log(oom_msg)
-                return None
-
-            # Any other cuDF error: log & skip
-            error_msg = f"ERROR: cuDF failed on {base_name}: {err_msg}"
+            # Any other error: log & skip
+            error_msg = f"ERROR: Failed to process {base_name}: {str(e)}"
             write_to_csv_analysis(csv_output_dir, error_msg)
             write_to_log(error_msg)
+            print(error_msg)
             return None
         
         # Try to extract bucket size from filename if not in data
@@ -424,6 +527,20 @@ def log_performance_metrics(results, operation_name, csv_output_dir=None):
                 write_to_csv_analysis(csv_output_dir, message)
             print(message)
 
+# Function to process a chunk of data and return results
+def process_chunk(chunk_df, csv_output_dir, chunk_name):
+    """Process a chunk of data and return the processed dataframe"""
+    # Log the chunk processing
+    chunk_size = len(chunk_df)
+    msg = f"Processing {chunk_name} with {chunk_size} rows"
+    write_to_log(msg)
+    write_to_csv_analysis(csv_output_dir, msg)
+    print(msg)
+    
+    # Here you would do any preprocessing needed on the chunk
+    # For now, we're just returning the chunk as-is
+    return chunk_df
+
 # Main analysis workflow
 print(f"Loading benchmark data from: {input_dir}")
 file_pattern = os.path.join(input_dir, "*.csv")
@@ -443,6 +560,10 @@ except ImportError:
     has_rmm = False
     print("RMM not available. Will not clear GPU memory between files.")
 
+# Initialize result containers
+basic_stats_results = []
+all_monotonicity_list = []
+
 # Process all CSV files one by one with full analysis per file
 print(f"\nTotal files to process: {len(all_files)}\n")
 write_to_log(f"Total files to process: {len(all_files)}\n")
@@ -452,6 +573,31 @@ for i, file in enumerate(all_files):
     file_name = os.path.basename(file)
     print(f"\n[{i+1}/{len(all_files)}] === STARTING FILE {i+1}/{len(all_files)}: {file_name} ===")
     write_to_log(f"\n[{i+1}/{len(all_files)}] === STARTING FILE {i+1}/{len(all_files)}: {file_name} ===")
+    
+    # If this isn't the first file, sleep for 2 seconds to allow memory cleanup
+    if i > 0:
+        sleep_msg = "Sleeping for 2 seconds before processing next file to allow memory cleanup..."
+        print(sleep_msg)
+        write_to_log(sleep_msg)
+        time.sleep(2)
+        
+        # Force garbage collection
+        gc.collect()
+        
+        # Log GPU memory status if nvidia-smi is available
+        if has_nvidia_smi:
+            try:
+                nvidia_smi.nvmlInit()
+                handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
+                info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+                mem_used_mb = info.used / 1024 / 1024
+                mem_total_mb = info.total / 1024 / 1024
+                mem_msg = f"GPU Memory after cleanup: Used {mem_used_mb:.2f}MB / Total {mem_total_mb:.2f}MB ({(info.used/info.total)*100:.2f}%)"
+                print(mem_msg)
+                write_to_log(mem_msg)
+                nvidia_smi.nvmlShutdown()
+            except Exception as e:
+                write_to_log(f"Error getting GPU memory info: {str(e)}")
     
     try:
         # Step 1: Load the CSV file
@@ -477,9 +623,7 @@ for i, file in enumerate(all_files):
         write_to_csv_analysis(csv_output_dir, f"File size: {file_size_mb:.2f} MB")
         
         # Load file with appropriate method
-        # ---------------------------
-        # GPU-only loading block
-        # ---------------------------
+        # ---------------------------  GPU-only loading block  ---------------------------
         try:
             if not has_cudf:
                 raise ImportError("cuDF not available")
@@ -491,15 +635,240 @@ for i, file in enumerate(all_files):
             msg = f"Loaded with cuDF in {load_time:.4f} seconds"
         except Exception as e:
             err_msg = str(e)
-            if "out of memory" in err_msg.lower() or "cudaErrorMemoryAllocation" in err_msg:
-                skip_msg = f"[{i+1}/{len(all_files)}] SKIPPED (GPU OOM): {file_name}"
-            else:
-                skip_msg = f"[{i+1}/{len(all_files)}] SKIPPED (cuDF error): {file_name} – {err_msg}"
+            # ---------------- GPU OOM  →  split the file in 2 chunks ----------------
+            if "out of memory" in err_msg.lower() or "cudaerrormemoryallocation" in err_msg.lower():
+                oom_msg = f"[{i+1}/{len(all_files)}] GPU OOM on {file_name}. " \
+                          "Retrying with two half-size chunks."
+                print(oom_msg)
+                write_to_log(oom_msg)
+                write_to_csv_analysis(csv_output_dir, oom_msg)
 
+                # New approach: Use pandas to read first, then convert to cudf
+                oom_msg = f"[{i+1}/{len(all_files)}] GPU OOM on {file_name}. Trying pandas+cudf approach."
+                print(oom_msg)
+                write_to_log(oom_msg)
+                write_to_csv_analysis(csv_output_dir, oom_msg)
+                
+                # Determine number of rows and calculate chunk size
+                with open(file, "r") as fh:
+                    row_cnt = sum(1 for _ in fh) - 1
+                half_rows = int(max(1, row_cnt // 2))
+                write_to_log(f"File rows (excl. header): {row_cnt} -> chunk size {half_rows}")
+                
+                # Container for partial results
+                partial_results = []
+                
+                for part_idx, chunk_start in enumerate([0, half_rows], start=1):
+                    part_label = f"chunk {part_idx}/2"
+                    rows_to_read = half_rows if part_idx == 1 else (row_cnt - half_rows)
+                    
+                    part_msg = f"→ Loading {part_label} with pandas (start={chunk_start}, rows={rows_to_read})"
+                    print(part_msg)
+                    write_to_log(part_msg)
+                    write_to_csv_analysis(csv_output_dir, part_msg)
+                    
+                    part_start = time.time()
+                    try:
+                        # Step 1: Read with pandas to avoid cudf.read_csv issue
+                        if part_idx == 1:
+                            # First chunk: read from beginning with nrows
+                            pandas_chunk = pd.read_csv(file, nrows=rows_to_read)
+                        else:
+                            # Second chunk: skip first chunk and read rest
+                            pandas_chunk = pd.read_csv(file, skiprows=range(1, chunk_start+1))
+                        
+                        # Step 2: Convert pandas DataFrame to cudf
+                        conversion_start = time.time()
+                        part_df = cudf.DataFrame.from_pandas(pandas_chunk)
+                        conversion_time = time.time() - conversion_start
+                        
+                        # Log success
+                        load_time = time.time() - part_start
+                        msg = f"{part_label} loaded in {load_time:.2f}s (pandas) + {conversion_time:.2f}s (to cudf), rows={len(part_df)}"
+                        write_to_log(msg)
+                        write_to_csv_analysis(csv_output_dir, msg)
+                        print(msg)
+                    except Exception as part_e:
+                        # give up on this file
+                        err = f"❌ Failed to load {part_label}: {part_e}"
+                        write_to_log(err)
+                        write_to_csv_analysis(csv_output_dir, err)
+                        print(err)
+                        raise   # handled by outer try/except
+
+                    load_sec = time.time() - part_start
+                    write_to_log(f"{part_label} loaded in {load_sec:.2f}s, rows={len(part_df)}")
+
+                    # ---------------- run per-file analysis on this chunk ----------------
+                    process_start = time.time()
+                    # reuse the existing analysis code paths with the *same* local
+                    # variables that expect df
+                    df = part_df
+                    # Write chunk header to analysis file
+                    chunk_header = f"\n=== {part_label.upper()} ANALYSIS ===\n"
+                    write_to_csv_analysis(csv_output_dir, chunk_header)
+                    
+                    # call the basic-stats / monotonicity helpers directly
+                    # (they are pure and don't mutate df)
+                    part_result = {}
+                    
+                    # Write basic stats for this chunk
+                    write_to_csv_analysis(csv_output_dir, "\n=== Basic Statistics ===\n")
+                    for algo in df['algorithm'].unique().to_pandas():
+                        for bs in df['bucket_size'].unique().to_pandas():
+                            # Calculate basic stats
+                            stats = calculate_basic_stats(df, algo, bs)
+                            part_result.setdefault('basic', []).append(stats)
+                            
+                            # Write chunk-specific basic stats to analysis file
+                            if stats:
+                                write_to_csv_analysis(csv_output_dir, f"Algorithm: {algo}, Bucket Size: {bs} ({part_label}):")
+                                write_to_csv_analysis(csv_output_dir, f"  Data points: {stats['count']}")
+                                write_to_csv_analysis(csv_output_dir, f"  Normalized position range: {stats['norm_min']:.2f} to {stats['norm_max']:.2f}")
+                                write_to_csv_analysis(csv_output_dir, f"  Mean normalized position: {stats['norm_mean']:.2f}")
+                                write_to_csv_analysis(csv_output_dir, f"  Std dev of normalized position: {stats['norm_std']:.2f}")
+                                write_to_csv_analysis(csv_output_dir, f"  Fairness (Token-Pod Correlation): {stats['fairness_correlation']:.4f} (p={stats['p_value']:.3f})\n")
+                    
+                    # Write monotonicity results for this chunk
+                    write_to_csv_analysis(csv_output_dir, "\n=== Monotonicity Analysis ===\n")
+                    for algo in df['algorithm'].unique().to_pandas():
+                        for bs in df['bucket_size'].unique().to_pandas():
+                            # Calculate monotonicity
+                            mono_result = check_monotonicity(df, algo, bs)
+                            part_result.setdefault('mono', []).append(mono_result)
+                            
+                            # Write chunk-specific monotonicity to analysis file
+                            if isinstance(mono_result, dict) and 'non_monotonic_pct' in mono_result:
+                                msg = f"  {mono_result['algorithm']} (Bucket: {mono_result['bucket_size']}, {part_label}): {mono_result['non_monotonic_pct']:.2f}% non-monotonic ({mono_result['non_monotonic_pairs']}/{mono_result['total_pairs']} pairs)"
+                                write_to_csv_analysis(csv_output_dir, msg)
+                                
+                    partial_results.append(part_result)
+                    proc_sec = time.time() - process_start
+                    write_to_log(f"{part_label} analysed in {proc_sec:.2f}s")
+                    print(f"{part_label} analysed in {proc_sec:.2f}s")
+
+                    # ----------- free GPU RAM for next chunk -----------
+                    del part_df
+                    gc.collect()
+                    if has_rmm:
+                        try:
+                            rmm.reinitialize()
+                        except Exception:
+                            pass
+
+                # ---------------- merge partial_results ----------------
+                # Write combined results header
+                write_to_csv_analysis(csv_output_dir, "\n=== COMBINED RESULTS FROM ALL CHUNKS ===\n")
+                
+                # Get all unique algorithm/bucket size combinations
+                algo_bucket_combos = set()
+                for pr in partial_results:
+                    for stat in pr['basic']:
+                        algo_bucket_combos.add((stat['algorithm'], stat['bucket_size']))
+                
+                # Properly aggregate statistics across chunks
+                agg_basic_stats = {}
+                agg_mono_stats = {}
+                
+                for algo, bucket in algo_bucket_combos:
+                    # Collect all stats for this algo/bucket pair
+                    all_basic_stats = []
+                    all_mono_stats = []
+                    
+                    for pr in partial_results:
+                        basic_matches = [s for s in pr['basic'] if s['algorithm'] == algo and s['bucket_size'] == bucket]
+                        mono_matches = [m for m in pr['mono'] if m['algorithm'] == algo and m['bucket_size'] == bucket]
+                        
+                        if basic_matches:
+                            all_basic_stats.append(basic_matches[0])
+                        if mono_matches:
+                            all_mono_stats.append(mono_matches[0])
+                    
+                    # Aggregate basic stats
+                    if all_basic_stats:
+                        # Start with a copy of the first stats object
+                        agg_stat = all_basic_stats[0].copy()
+                        
+                        # Sum up counts
+                        total_count = sum(s['count'] for s in all_basic_stats)
+                        agg_stat['count'] = total_count
+                        
+                        # Weighted average for means
+                        if total_count > 0:
+                            agg_stat['norm_mean'] = sum(s['norm_mean'] * s['count'] for s in all_basic_stats) / total_count
+                            agg_stat['norm_std'] = sum(s['norm_std'] * s['count'] for s in all_basic_stats) / total_count
+                        
+                        # Get global min/max
+                        agg_stat['norm_min'] = min(s['norm_min'] for s in all_basic_stats)
+                        agg_stat['norm_max'] = max(s['norm_max'] for s in all_basic_stats)
+                        
+                        # Use weighted fairness correlation
+                        total_corr = sum(s['fairness_correlation'] * s['count'] for s in all_basic_stats)
+                        agg_stat['fairness_correlation'] = total_corr / total_count if total_count > 0 else 0
+                        
+                        # Store aggregated stats
+                        agg_basic_stats[(algo, bucket)] = agg_stat
+                    
+                    # Aggregate monotonicity stats
+                    if all_mono_stats:
+                        # Start with a copy of the first stats object
+                        agg_mono = all_mono_stats[0].copy()
+                        
+                        # Sum up counts
+                        agg_mono['monotonic_pairs'] = sum(m['monotonic_pairs'] for m in all_mono_stats)
+                        agg_mono['non_monotonic_pairs'] = sum(m['non_monotonic_pairs'] for m in all_mono_stats)
+                        agg_mono['total_pairs'] = sum(m['total_pairs'] for m in all_mono_stats)
+                        
+                        # Recalculate percentage
+                        if agg_mono['total_pairs'] > 0:
+                            agg_mono['non_monotonic_pct'] = (agg_mono['non_monotonic_pairs'] / agg_mono['total_pairs']) * 100
+                        else:
+                            agg_mono['non_monotonic_pct'] = 0
+                        
+                        # Store aggregated stats
+                        agg_mono_stats[(algo, bucket)] = agg_mono
+                
+                # Write combined basic stats
+                write_to_csv_analysis(csv_output_dir, "\n=== Combined Basic Statistics ===\n")
+                for key, stats in agg_basic_stats.items():
+                    algo, bucket = key
+                    write_to_csv_analysis(csv_output_dir, f"Algorithm: {algo}, Bucket Size: {bucket} (COMBINED):")
+                    write_to_csv_analysis(csv_output_dir, f"  Data points: {stats['count']}")
+                    write_to_csv_analysis(csv_output_dir, f"  Normalized position range: {stats['norm_min']:.2f} to {stats['norm_max']:.2f}")
+                    write_to_csv_analysis(csv_output_dir, f"  Mean normalized position: {stats['norm_mean']:.2f}")
+                    write_to_csv_analysis(csv_output_dir, f"  Std dev of normalized position: {stats['norm_std']:.2f}")
+                    write_to_csv_analysis(csv_output_dir, f"  Fairness (Token-Pod Correlation): {stats['fairness_correlation']:.4f} (p={stats['p_value']:.3f})\n")
+                
+                # Write combined monotonicity
+                write_to_csv_analysis(csv_output_dir, "\n=== Combined Monotonicity Analysis ===\n")
+                for key, mono in agg_mono_stats.items():
+                    algo, bucket = key
+                    msg = f"  {algo} (Bucket: {bucket}, COMBINED): {mono['non_monotonic_pct']:.2f}% non-monotonic ({mono['non_monotonic_pairs']}/{mono['total_pairs']} pairs)"
+                    write_to_csv_analysis(csv_output_dir, msg)
+                    
+                # Convert aggregated stats back to lists for global aggregation
+                merged_basic = list(agg_basic_stats.values())
+                merged_mono = list(agg_mono_stats.values())
+
+                # save for later global aggregation
+                basic_stats_results.extend(merged_basic)
+                all_monotonicity_list.extend(merged_mono)
+                
+                # Log success message
+                success_msg = f"[{i+1}/{len(all_files)}] Successfully analyzed {file_name} in chunks"
+                print(success_msg)
+                write_to_log(success_msg)
+                write_to_csv_analysis(csv_output_dir, "\n" + success_msg)
+
+                # skip the normal single-df path
+                continue
+
+            # ---------- any other cuDF error : skip file ----------
+            skip_msg = f"[{i+1}/{len(all_files)}] SKIPPED (cuDF error): {file_name} – {err_msg}"
             write_to_csv_analysis(csv_output_dir, skip_msg)
             write_to_log(skip_msg)
             print(skip_msg)
-            continue     # move on to next file
+            continue
         
         write_to_csv_analysis(csv_output_dir, msg)
         write_to_log(msg)
@@ -600,6 +969,24 @@ for i, file in enumerate(all_files):
             except Exception as e:
                 print(f"[{i+1}/{len(all_files)}] WARNING: Could not clear GPU memory: {e}")
                 write_to_log(f"[{i+1}/{len(all_files)}] WARNING: Could not clear GPU memory: {e}")
+        
+        # Force garbage collection to free memory
+        gc.collect()
+        
+        # Log GPU memory status after file completion if nvidia-smi is available
+        if has_nvidia_smi:
+            try:
+                nvidia_smi.nvmlInit()
+                handle = nvidia_smi.nvmlDeviceGetHandleByIndex(0)
+                info = nvidia_smi.nvmlDeviceGetMemoryInfo(handle)
+                mem_used_mb = info.used / 1024 / 1024
+                mem_total_mb = info.total / 1024 / 1024
+                mem_msg = f"GPU Memory after file completion: Used {mem_used_mb:.2f}MB / Total {mem_total_mb:.2f}MB ({(info.used/info.total)*100:.2f}%)"
+                print(mem_msg)
+                write_to_log(mem_msg)
+                nvidia_smi.nvmlShutdown()
+            except Exception as e:
+                write_to_log(f"Error getting GPU memory info: {str(e)}")
 
 # Combine all dataframes for comparison analysis
 start_time = time.time()
@@ -654,6 +1041,15 @@ if combined_dfs:
         message = f"Combined {len(combined_dfs)} dataframes in {combine_time:.4f}s using {platform}"
         print(message)
         write_to_log(message)
+        
+        # Always convert to pandas for final analysis to avoid OOM errors
+        # The individual file processing leverages GPU, but combined analysis uses CPU
+        if has_cudf and isinstance(combined_df, cudf.DataFrame):
+            write_to_log("Converting to pandas for final cross-file analysis to avoid memory issues")
+            print("Converting to pandas for final cross-file analysis to avoid memory issues")
+            combined_df = combined_df.to_pandas()
+            # Keep has_cudf flag true since we want to continue using GPU for individual files
+            # But we'll check for pandas dataframe type when needed
     except Exception as e:
         print(f"Error combining dataframes: {e}. Falling back to pandas.")
         write_to_log(f"Error combining dataframes: {e}. Falling back to pandas.")
@@ -678,12 +1074,23 @@ else:
 write_to_log("Data loaded. Performing analysis...\n")
 print("Data loaded. Performing analysis...")
 
+# Free memory before heavy analysis
+gc.collect()  # Collect Python garbage
+if has_cudf and has_rmm:
+    try:
+        rmm.reinitialize()
+        print("Reinitialized GPU memory before global analysis")
+        write_to_log("Reinitialized GPU memory before global analysis")
+    except Exception as e:
+        print(f"WARNING: Could not reinitialize GPU memory: {e}")
+        write_to_log(f"WARNING: Could not reinitialize GPU memory: {e}")
+
 # Basic statistics - Group by algorithm AND bucket size
 write_to_log("\n=== Basic Statistics (Grouped by Algo & Bucket Size) ===\n")
 print("\n=== Basic Statistics (Grouped by Algo & Bucket Size) ===\n")
 
 # Calculate basic stats for each algorithm and bucket size
-basic_stats_results = []
+# basic_stats_results already initialized earlier
 for name, group in combined_df.groupby(['algorithm', 'bucket_size']):
     algo_name, b_size = name
     stats = calculate_basic_stats(combined_df, algo_name, b_size)
@@ -802,7 +1209,7 @@ write_to_log("\nChecking monotonicity of fairness score...")
 print("\nChecking monotonicity of fairness score...")
 
 # Run monotonicity check only if columns exist
-all_monotonicity_list = []
+# all_monotonicity_list already initialized earlier
 required_mono_cols = ['user_id', 'user_token_sum', 'normalized', 'algorithm', 'bucket_size']
 if all(col in combined_df.columns for col in required_mono_cols):
     write_to_log("\nChecking monotonicity...")
@@ -929,21 +1336,21 @@ if all(col in combined_df.columns for col in required_lb_cols):
         
         # Write to main log file
         write_to_log(f"\nLoad balance for {algo_name} (Bucket: {b_size}):")
-        write_to_log(f"  Min load: {min_load:.2f}")
-        write_to_log(f"  Max load: {max_load:.2f}")
-        write_to_log(f"  Mean load: {mean_load:.2f}")
-        write_to_log(f"  Std dev: {std_load:.2f}")
-        write_to_log(f"  Load balance ratio (max/min): {load_balance_ratio:.2f}")
-        write_to_log(f"  Coefficient of variation (std/mean): {cv:.4f}")
+        write_to_log(f"  Min load: {result.get('min_load', 0):.2f}")
+        write_to_log(f"  Max load: {result.get('max_load', 0):.2f}")
+        write_to_log(f"  Mean load: {result.get('mean_load', 0):.2f}")
+        write_to_log(f"  Std dev: {result.get('std_load', 0):.2f}")
+        write_to_log(f"  Load balance ratio (max/min): {result.get('load_balance_ratio', 0):.2f}")
+        write_to_log(f"  Coefficient of variation (std/mean): {result.get('coefficient_of_variation', 0):.4f}")
         
         # Print to console
         print(f"\nLoad balance for {algo_name} (Bucket: {b_size}):")
-        print(f"  Min load: {min_load:.2f}")
-        print(f"  Max load: {max_load:.2f}")
-        print(f"  Mean load: {mean_load:.2f}")
-        print(f"  Std dev: {std_load:.2f}")
-        print(f"  Load balance ratio (max/min): {load_balance_ratio:.2f}")
-        print(f"  Coefficient of variation (std/mean): {cv:.4f}")
+        print(f"  Min load: {result.get('min_load', 0):.2f}")
+        print(f"  Max load: {result.get('max_load', 0):.2f}")
+        print(f"  Mean load: {result.get('mean_load', 0):.2f}")
+        print(f"  Std dev: {result.get('std_load', 0):.2f}")
+        print(f"  Load balance ratio (max/min): {result.get('load_balance_ratio', 0):.2f}")
+        print(f"  Coefficient of variation (std/mean): {result.get('coefficient_of_variation', 0):.4f}")
     
     # Skip saving load balance results to CSV to save disk space
     # if load_balance_results:
@@ -1036,7 +1443,11 @@ if adaptive_variants:
         print("  Load balance data not available for comparison.")
     else:    
         for algo in adaptive_variants:
-            for b_size in sorted(combined_df['bucket_size'].unique()):
+            # Convert to pandas Series if using cuDF
+            bucket_sizes = combined_df['bucket_size'].unique()
+            if isinstance(bucket_sizes, cudf.Series):
+                bucket_sizes = bucket_sizes.to_pandas()
+            for b_size in sorted(bucket_sizes):
                 # Get weight type
                 if 'balanced' in algo:
                     weight_type = "Balanced (0.5/0.5)"
@@ -1050,8 +1461,8 @@ if adaptive_variants:
                 # Get load balance for this algorithm and bucket size
                 lb_data = [lb for lb in load_balance_results if lb['algorithm'] == algo and lb['bucket_size'] == b_size]
                 if lb_data:
-                    std_dev = lb_data[0]['std_load']
-                    max_min = lb_data[0]['load_balance_ratio']
+                    std_dev = lb_data[0].get('load_std_dev', 0)
+                    max_min = lb_data[0].get('load_max_min_ratio', 0)
                     write_to_log(f"  {weight_type} (Bucket Size {b_size}): StdDev={std_dev:.2f}, Max/Min={max_min:.2f}")
                     print(f"  {weight_type} (Bucket Size {b_size}): StdDev={std_dev:.2f}, Max/Min={max_min:.2f}")
 
