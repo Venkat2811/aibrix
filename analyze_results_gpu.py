@@ -31,7 +31,7 @@ import re
 import time
 
 parser = argparse.ArgumentParser(description="Analyze benchmark results.")
-parser.add_argument('--input_dir', type=str, default="./bench-venkat/analysis/advanced", help='Directory containing CSV results to analyze')
+parser.add_argument('--input_dir', type=str, default="./bench-venkat/analysis/adaptive-variants1", help='Directory containing CSV results to analyze')
 parser.add_argument('--output_dir', type=str, help='Directory to store analysis results (default: input_dir/analysis_TIMESTAMP)')
 # Parallel-execution options kept so existing CLI doesn't break,
 # but they are ignored to force serial execution.
@@ -555,10 +555,10 @@ write_to_log(f"Found {len(all_files)} files to analyze.")
 # Sort CSV files for consistent order
 all_files.sort()
 
-# Limit to first 25 CSV files
+# Skip the first 25 files and process the remaining ones
 if len(all_files) > 25:
-    print(f"Limiting analysis to first 25 files out of {len(all_files)} total files")
-    all_files = all_files[:25]
+    print(f"Skipping first 25 files, processing remaining {len(all_files) - 25} out of {len(all_files)} total files")
+    all_files = all_files[25:]
 
 # Import RMM for memory management
 try:
@@ -1575,12 +1575,25 @@ for result in csv_results:
     write_to_csv_analysis(result['output_dir'], "="*80)
     write_to_csv_analysis(result['output_dir'], f"\nAnalysis completed at: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
+# Define known distributions for better reporting
+known_distributions = ["balanced", "high_usage", "bursty"]
+
 # Get list of adaptive variants
 algo_names = combined_df['algorithm'].unique().to_pandas() if isinstance(combined_df, cudf.DataFrame) else combined_df['algorithm'].unique()
 adaptive_variants = [algo for algo in algo_names if 'adaptive' in algo]
 if adaptive_variants:
     write_to_log(f"Found {len(adaptive_variants)} adaptive variants: {', '.join(adaptive_variants)}")
     print(f"Found {len(adaptive_variants)} adaptive variants: {', '.join(adaptive_variants)}")
+    
+    # Check for distributions in the data
+    found_distributions = []
+    for dist in known_distributions:
+        if any(dist in file for file in all_files):
+            found_distributions.append(dist)
+    
+    if found_distributions:
+        write_to_log(f"Found {len(found_distributions)} distributions: {', '.join(found_distributions)}")
+        print(f"Found {len(found_distributions)} distributions: {', '.join(found_distributions)}")
     
     # Compare fairness correlation across variants
     write_to_log("\nFairness Correlation Comparison (higher is better):")

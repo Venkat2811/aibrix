@@ -7,7 +7,7 @@ import random
 import time
 
 # Output directory for advanced results
-output_dir = "./bench-venkat/analysis/adaptive-variants"
+output_dir = "./bench-venkat/analysis/adaptive-variants1"
 os.makedirs(output_dir, exist_ok=True)
 
 # Simulation parameters
@@ -17,7 +17,7 @@ simulation_steps = 4000  # Each step is a time tick
 WINDOW_SIZES_TO_TEST = [500, 1000, 2000]  # Different window sizes to test
 requests_per_step = 1000  # Number of requests per time step
 
-# User behavior parameters - Two different distributions to test
+# User behavior parameters - Three different distributions to test
 user_distributions = {
     "balanced": [
         {"category": "low", "prob": 0.2, "burstiness": 0.1, "input_base": 30, "output_base": 500},
@@ -30,6 +30,12 @@ user_distributions = {
         {"category": "medium", "prob": 0.3, "burstiness": 0.2, "input_base": 50, "output_base": 2000},
         {"category": "high", "prob": 0.5, "burstiness": 0.3, "input_base": 100, "output_base": 4000},
         {"category": "extreme", "prob": 0.1, "burstiness": 0.4, "input_base": 200, "output_base": 8000},
+    ],
+    "bursty": [
+        {"category": "low", "prob": 0.3, "burstiness": 0.6, "input_base": 20, "output_base": 300},
+        {"category": "medium", "prob": 0.4, "burstiness": 0.7, "input_base": 40, "output_base": 1500},
+        {"category": "high", "prob": 0.2, "burstiness": 0.8, "input_base": 80, "output_base": 3000},
+        {"category": "extreme", "prob": 0.1, "burstiness": 0.9, "input_base": 150, "output_base": 6000},
     ]
 }
 
@@ -47,8 +53,8 @@ user_input_base = {cat: next(p["input_base"] for p in user_profiles if p["catego
 user_output_base = {cat: next(p["output_base"] for p in user_profiles if p["category"] == cat) for cat in set(user_categories)}
 
 # Routing algorithms
-BUCKET_SIZES_TO_TEST = [500, 1000, 2000, 4000, 8000, 16000]
-MIN_THRESHOLD_VALUES = [500, 1000, 2500, 5000]  # Reduced set of min threshold values
+BUCKET_SIZES_TO_TEST = [1000, 2000, 4000]  # Optimized bucket sizes (removed 8000, 16000)
+MIN_THRESHOLD_VALUES = [1000, 2500, 5000]  # Reduced set of min threshold values
 RANDOM_FACTOR_SCALE = 0.1
 
 # Track min/max tokens for adaptive bucket sizing
@@ -72,26 +78,26 @@ base_configs = {
         "fairness_weight": 0.5,
         "utilization_weight": 0.5,
     },
-    "vtc_adaptive_fairness_only": {
-        "fairness_weight": 1.0,
-        "utilization_weight": 0.0,
-    },
-    "vtc_adaptive_utilization_only": {
-        "fairness_weight": 0.0,
-        "utilization_weight": 1.0,
-    },
+    # "vtc_adaptive_fairness_only": {
+    #     "fairness_weight": 1.0,
+    #     "utilization_weight": 0.0,
+    # },
+    # "vtc_adaptive_utilization_only": {
+    #     "fairness_weight": 0.0,
+    #     "utilization_weight": 1.0,
+    # },
     "vtc_adaptive_equal_weights": {
         "fairness_weight": 1.0,
         "utilization_weight": 1.0,
     },
-    "vtc_adaptive_fairness_07_03": {
-        "fairness_weight": 0.7,
-        "utilization_weight": 0.3,
-    },
-    "vtc_adaptive_fairness_03_07": {
-        "fairness_weight": 0.3,
-        "utilization_weight": 0.7,
-    }
+    # "vtc_adaptive_fairness_07_03": {
+    #     "fairness_weight": 0.7,
+    #     "utilization_weight": 0.3,
+    # },
+    # "vtc_adaptive_fairness_03_07": {
+    #     "fairness_weight": 0.3,
+    #     "utilization_weight": 0.7,
+    # }
 }
 
 # Create algorithm variants with different min thresholds
