@@ -3,9 +3,9 @@
 Just stashing it here for now
 
 ### refer to:
-- benchmark_mp_advanced.py
-- analyze_results_gpu.py
-- results/
+- benchmark_mp_advanced.py - Simulation implementation
+- analyze_results_gpu.py - Analysis with GPU acceleration
+- results/ - Raw data and analysis logs
 
 ### Note
 Benchmark simulation & analysis was done with aid of several LLMs. I monitored changes,analyzed results closely and verified them at each step.
