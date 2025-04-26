@@ -1,0 +1,613 @@
+(base) venkat:~/Documents/venkat-github/aibrix % python analyze_results.py --input_dir ./bench-venkat/analysis/advanced-max-fair
+Loading benchmark data from: ./bench-venkat/analysis/advanced-max-fair
+Found 12 files to analyze.
+Loading files: 100%|█████████████████████████████████████████████| 12/12 [00:54<00:00,  4.56s/it]
+Data loaded. Performing analysis...
+
+=== Basic Statistics (Grouped by Algo & Bucket Size) ===
+
+Algorithm: clamped_linear, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.38 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.02
+  Fairness (Token-Pod Correlation): 0.0168 (p=0.000)
+
+Algorithm: clamped_linear, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.15 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.04
+  Fairness (Token-Pod Correlation): 0.0256 (p=0.000)
+
+Algorithm: clamped_linear, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.09 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.06
+  Fairness (Token-Pod Correlation): 0.0373 (p=0.000)
+
+Algorithm: clamped_linear, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.04 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.09
+  Fairness (Token-Pod Correlation): 0.0533 (p=0.000)
+
+Algorithm: modulo, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0000 (p=0.929)
+
+Algorithm: modulo, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0005 (p=0.367)
+
+Algorithm: modulo, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0003 (p=0.491)
+
+Algorithm: modulo, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0028 (p=0.000)
+
+Algorithm: quotient_remainder, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0000 (p=0.931)
+
+Algorithm: quotient_remainder, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0001 (p=0.898)
+
+Algorithm: quotient_remainder, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.45
+  Fairness (Token-Pod Correlation): -0.0002 (p=0.626)
+
+Algorithm: quotient_remainder, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0025 (p=0.000)
+
+Generating distribution plots...
+Analyzing user categories...
+Analyzing token count vs normalized position...
+Analyzing bucket size effects...
+
+Checking monotonicity of fairness score...
+Calculating Monotonicity...
+Monotonicity Groups: 100%|███████████████████████████████████████| 12/12 [00:26<00:00,  2.22s/it]
+                                                                                                 
+=== Monotonicity Analysis (Fairness Score) ===
+Average % of times fairness score DECREASED when user token sum INCREASED:
+  Algo: clamped_linear, Bucket: 1000, Non-Monotonic: 0.00%
+  Algo: clamped_linear, Bucket: 2000, Non-Monotonic: 0.00%
+  Algo: clamped_linear, Bucket: 4000, Non-Monotonic: 0.00%
+  Algo: clamped_linear, Bucket: 8000, Non-Monotonic: 0.00%
+  Algo: modulo, Bucket: 1000, Non-Monotonic: 45.48%
+  Algo: modulo, Bucket: 2000, Non-Monotonic: 28.74%
+  Algo: modulo, Bucket: 4000, Non-Monotonic: 16.40%
+  Algo: modulo, Bucket: 8000, Non-Monotonic: 8.60%
+  Algo: quotient_remainder, Bucket: 1000, Non-Monotonic: 45.47%
+  Algo: quotient_remainder, Bucket: 2000, Non-Monotonic: 28.68%
+  Algo: quotient_remainder, Bucket: 4000, Non-Monotonic: 16.40%
+  Algo: quotient_remainder, Bucket: 8000, Non-Monotonic: 8.57%
+
+Calculating predictability...
+
+Calculating predictability...
+Predictability Groups: 100%|█████████████████████████████████████| 12/12 [00:09<00:00,  1.33it/s]
+
+=== Predictability Analysis ===
+Average standard deviation of assigned pod (lower is more predictable):
+  Algo: clamped_linear, Bucket: 1000, Predictability: 0.0074
+  Algo: clamped_linear, Bucket: 2000, Predictability: 0.0164
+  Algo: clamped_linear, Bucket: 4000, Predictability: 0.0270
+  Algo: clamped_linear, Bucket: 8000, Predictability: 0.0406
+  Algo: modulo, Bucket: 1000, Predictability: 1.3551
+  Algo: modulo, Bucket: 2000, Predictability: 1.3541
+  Algo: modulo, Bucket: 4000, Predictability: 1.3519
+  Algo: modulo, Bucket: 8000, Predictability: 1.3578
+  Algo: quotient_remainder, Bucket: 1000, Predictability: 1.3526
+  Algo: quotient_remainder, Bucket: 2000, Predictability: 1.3540
+  Algo: quotient_remainder, Bucket: 4000, Predictability: 1.3574
+  Algo: quotient_remainder, Bucket: 8000, Predictability: 1.3491
+
+Calculating load balance from actual assignments...
+
+Calculating load balance from actual assignments...
+Load Balance Groups: 100%|███████████████████████████████████████| 12/12 [00:04<00:00,  2.75it/s]
+
+=== Load Balance Analysis (Utilization) ===
+Std Dev and Max/Min Ratio of requests per pod (lower is better):
+  Algo: clamped_linear, Bucket: 1000, StdDev=1788570.96, Max/Min=173891.00
+  Algo: clamped_linear, Bucket: 2000, StdDev=1788188.60, Max/Min=60588.02
+  Algo: clamped_linear, Bucket: 4000, StdDev=1787431.70, Max/Min=16938.37
+  Algo: clamped_linear, Bucket: 8000, StdDev=1785928.53, Max/Min=6602.92
+  Algo: modulo, Bucket: 1000, StdDev=282748.98, Max/Min=3.00
+  Algo: modulo, Bucket: 2000, StdDev=283146.10, Max/Min=3.00
+  Algo: modulo, Bucket: 4000, StdDev=282091.99, Max/Min=3.00
+  Algo: modulo, Bucket: 8000, StdDev=281495.35, Max/Min=2.98
+  Algo: quotient_remainder, Bucket: 1000, StdDev=282059.72, Max/Min=2.99
+  Algo: quotient_remainder, Bucket: 2000, StdDev=282438.97, Max/Min=3.00
+  Algo: quotient_remainder, Bucket: 4000, StdDev=283531.23, Max/Min=3.00
+  Algo: quotient_remainder, Bucket: 8000, StdDev=282599.58, Max/Min=3.01
+
+Analysis complete. Plots saved to: ./bench-venkat/analysis/advanced-max-fair/analysis
+(base) venkat:~/Documents/venkat-github/aibrix % 
+
+and
+(base) venkat:~/Documents/venkat-github/aibrix % python analyze_results.py --input_dir ./bench-venkat/analysis/advanced-max-util
+Loading benchmark data from: ./bench-venkat/analysis/advanced-max-util
+Found 12 files to analyze.
+Loading files: 100%|█████████████████████████████████████████████| 12/12 [00:54<00:00,  4.57s/it]
+Data loaded. Performing analysis...
+
+=== Basic Statistics (Grouped by Algo & Bucket Size) ===
+
+Algorithm: clamped_linear, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.30 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.03
+  Fairness (Token-Pod Correlation): 0.0008 (p=0.109)
+
+Algorithm: clamped_linear, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.15 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.04
+  Fairness (Token-Pod Correlation): 0.0002 (p=0.623)
+
+Algorithm: clamped_linear, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.09 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.06
+  Fairness (Token-Pod Correlation): -0.0010 (p=0.054)
+
+Algorithm: clamped_linear, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.04 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.09
+  Fairness (Token-Pod Correlation): -0.0004 (p=0.441)
+
+Algorithm: modulo, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0004 (p=0.435)
+
+Algorithm: modulo, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0001 (p=0.817)
+
+Algorithm: modulo, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0001 (p=0.841)
+
+Algorithm: modulo, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.49
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0008 (p=0.097)
+
+Algorithm: quotient_remainder, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0004 (p=0.446)
+
+Algorithm: quotient_remainder, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0004 (p=0.475)
+
+Algorithm: quotient_remainder, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0001 (p=0.845)
+
+Algorithm: quotient_remainder, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0006 (p=0.230)
+
+Generating distribution plots...
+Analyzing user categories...
+Analyzing token count vs normalized position...
+Analyzing bucket size effects...
+
+Checking monotonicity of fairness score...
+Calculating Monotonicity...
+Monotonicity Groups: 100%|███████████████████████████████████████| 12/12 [00:23<00:00,  1.96s/it]
+                                                                                                 
+=== Monotonicity Analysis (Fairness Score) ===
+Average % of times fairness score DECREASED when user token sum INCREASED:
+  Algo: clamped_linear, Bucket: 1000, Non-Monotonic: 0.00%
+  Algo: clamped_linear, Bucket: 2000, Non-Monotonic: 0.00%
+  Algo: clamped_linear, Bucket: 4000, Non-Monotonic: 0.00%
+  Algo: clamped_linear, Bucket: 8000, Non-Monotonic: 0.00%
+  Algo: modulo, Bucket: 1000, Non-Monotonic: 43.20%
+  Algo: modulo, Bucket: 2000, Non-Monotonic: 27.10%
+  Algo: modulo, Bucket: 4000, Non-Monotonic: 15.47%
+  Algo: modulo, Bucket: 8000, Non-Monotonic: 8.09%
+  Algo: quotient_remainder, Bucket: 1000, Non-Monotonic: 43.17%
+  Algo: quotient_remainder, Bucket: 2000, Non-Monotonic: 27.10%
+  Algo: quotient_remainder, Bucket: 4000, Non-Monotonic: 15.44%
+  Algo: quotient_remainder, Bucket: 8000, Non-Monotonic: 8.04%
+
+Calculating predictability...
+
+Calculating predictability...
+Predictability Groups: 100%|█████████████████████████████████████| 12/12 [00:13<00:00,  1.10s/it]
+
+=== Predictability Analysis ===
+Average standard deviation of assigned pod (lower is more predictable):
+  Algo: clamped_linear, Bucket: 1000, Predictability: 1.4103
+  Algo: clamped_linear, Bucket: 2000, Predictability: 1.4116
+  Algo: clamped_linear, Bucket: 4000, Predictability: 1.4080
+  Algo: clamped_linear, Bucket: 8000, Predictability: 1.4114
+  Algo: modulo, Bucket: 1000, Predictability: 1.4130
+  Algo: modulo, Bucket: 2000, Predictability: 1.4134
+  Algo: modulo, Bucket: 4000, Predictability: 1.4135
+  Algo: modulo, Bucket: 8000, Predictability: 1.4105
+  Algo: quotient_remainder, Bucket: 1000, Predictability: 1.4123
+  Algo: quotient_remainder, Bucket: 2000, Predictability: 1.4114
+  Algo: quotient_remainder, Bucket: 4000, Predictability: 1.4121
+  Algo: quotient_remainder, Bucket: 8000, Predictability: 1.4109
+
+Calculating load balance from actual assignments...
+
+Calculating load balance from actual assignments...
+Load Balance Groups: 100%|███████████████████████████████████████| 12/12 [00:05<00:00,  2.33it/s]
+
+=== Load Balance Analysis (Utilization) ===
+Std Dev and Max/Min Ratio of requests per pod (lower is better):
+  Algo: clamped_linear, Bucket: 1000, StdDev=9.46, Max/Min=1.00
+  Algo: clamped_linear, Bucket: 2000, StdDev=27.29, Max/Min=1.00
+  Algo: clamped_linear, Bucket: 4000, StdDev=11.11, Max/Min=1.00
+  Algo: clamped_linear, Bucket: 8000, StdDev=26.87, Max/Min=1.00
+  Algo: modulo, Bucket: 1000, StdDev=17.78, Max/Min=1.00
+  Algo: modulo, Bucket: 2000, StdDev=31.85, Max/Min=1.00
+  Algo: modulo, Bucket: 4000, StdDev=14.98, Max/Min=1.00
+  Algo: modulo, Bucket: 8000, StdDev=32.51, Max/Min=1.00
+  Algo: quotient_remainder, Bucket: 1000, StdDev=15.46, Max/Min=1.00
+  Algo: quotient_remainder, Bucket: 2000, StdDev=24.14, Max/Min=1.00
+  Algo: quotient_remainder, Bucket: 4000, StdDev=24.34, Max/Min=1.00
+  Algo: quotient_remainder, Bucket: 8000, StdDev=15.39, Max/Min=1.00
+
+Analysis complete. Plots saved to: ./bench-venkat/analysis/advanced-max-util/analysis
+(base) venkat:~/Documents/venkat-github/aibrix % 
+
+
+in advanced-max-util/ results UTILIZATION_WEIGHT was 1 and FAIRNESS_WEIGHT was 0
+in advanced-max-fair it was vice versa
+
+python analyze_results.py --input_dir ./bench-venkat/analysis/advanced-balanced 
+Loading benchmark data from: ./bench-venkat/analysis/advanced-balanced
+Found 12 files to analyze.
+Loading files: 100%|█████████████████████████████████████████████| 12/12 [00:51<00:00,  4.31s/it]
+Data loaded. Performing analysis...
+
+=== Basic Statistics (Grouped by Algo & Bucket Size) ===
+
+Algorithm: clamped_linear, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.33 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.03
+  Fairness (Token-Pod Correlation): 0.0014 (p=0.006)
+
+Algorithm: clamped_linear, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.13 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.04
+  Fairness (Token-Pod Correlation): 0.0031 (p=0.000)
+
+Algorithm: clamped_linear, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.08 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.06
+  Fairness (Token-Pod Correlation): 0.0065 (p=0.000)
+
+Algorithm: clamped_linear, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.04 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.09
+  Fairness (Token-Pod Correlation): 0.0124 (p=0.000)
+
+Algorithm: modulo, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0001 (p=0.811)
+
+Algorithm: modulo, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0006 (p=0.235)
+
+Algorithm: modulo, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0011 (p=0.022)
+
+Algorithm: modulo, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): 0.0047 (p=0.000)
+
+Algorithm: quotient_remainder, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0002 (p=0.649)
+
+Algorithm: quotient_remainder, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0003 (p=0.486)
+
+Algorithm: quotient_remainder, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0010 (p=0.051)
+
+Algorithm: quotient_remainder, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.00 to 5.00
+  Mean normalized position: 2.50
+  Std dev of normalized position: 1.44
+  Fairness (Token-Pod Correlation): -0.0008 (p=0.104)
+
+Generating distribution plots...
+Analyzing user categories...
+Analyzing token count vs normalized position...
+Analyzing bucket size effects...
+
+Checking monotonicity of fairness score...
+Calculating Monotonicity...
+Monotonicity Groups: 100%|███████████████████████████████████████| 12/12 [00:35<00:00,  2.96s/it]
+                                                                                                 
+=== Monotonicity Analysis (Fairness Score) ===
+Average % of times fairness score DECREASED when user token sum INCREASED:
+  Algo: clamped_linear, Bucket: 1000, Non-Monotonic: 0.00%
+  Algo: clamped_linear, Bucket: 2000, Non-Monotonic: 0.00%
+  Algo: clamped_linear, Bucket: 4000, Non-Monotonic: 0.00%
+  Algo: clamped_linear, Bucket: 8000, Non-Monotonic: 0.00%
+  Algo: modulo, Bucket: 1000, Non-Monotonic: 44.61%
+  Algo: modulo, Bucket: 2000, Non-Monotonic: 28.17%
+  Algo: modulo, Bucket: 4000, Non-Monotonic: 16.12%
+  Algo: modulo, Bucket: 8000, Non-Monotonic: 8.47%
+  Algo: quotient_remainder, Bucket: 1000, Non-Monotonic: 44.62%
+  Algo: quotient_remainder, Bucket: 2000, Non-Monotonic: 28.20%
+  Algo: quotient_remainder, Bucket: 4000, Non-Monotonic: 16.14%
+  Algo: quotient_remainder, Bucket: 8000, Non-Monotonic: 8.49%
+
+Calculating predictability...
+
+Calculating predictability...
+Predictability Groups: 100%|█████████████████████████████████████| 12/12 [00:09<00:00,  1.33it/s]
+
+=== Predictability Analysis ===
+Average standard deviation of assigned pod (lower is more predictable):
+  Algo: clamped_linear, Bucket: 1000, Predictability: 0.2958
+  Algo: clamped_linear, Bucket: 2000, Predictability: 0.2973
+  Algo: clamped_linear, Bucket: 4000, Predictability: 0.2990
+  Algo: clamped_linear, Bucket: 8000, Predictability: 0.3073
+  Algo: modulo, Bucket: 1000, Predictability: 1.3726
+  Algo: modulo, Bucket: 2000, Predictability: 1.3749
+  Algo: modulo, Bucket: 4000, Predictability: 1.3658
+  Algo: modulo, Bucket: 8000, Predictability: 1.3728
+  Algo: quotient_remainder, Bucket: 1000, Predictability: 1.3703
+  Algo: quotient_remainder, Bucket: 2000, Predictability: 1.3740
+  Algo: quotient_remainder, Bucket: 4000, Predictability: 1.3680
+  Algo: quotient_remainder, Bucket: 8000, Predictability: 1.3713
+
+Calculating load balance from actual assignments...
+
+Calculating load balance from actual assignments...
+Load Balance Groups: 100%|███████████████████████████████████████| 12/12 [00:04<00:00,  2.77it/s]
+
+=== Load Balance Analysis (Utilization) ===
+Std Dev and Max/Min Ratio of requests per pod (lower is better):
+  Algo: clamped_linear, Bucket: 1000, StdDev=1575197.37, Max/Min=87825.00
+  Algo: clamped_linear, Bucket: 2000, StdDev=1574899.31, Max/Min=28802.41
+  Algo: clamped_linear, Bucket: 4000, StdDev=1574342.72, Max/Min=11074.86
+  Algo: clamped_linear, Bucket: 8000, StdDev=1573449.36, Max/Min=5221.80
+  Algo: modulo, Bucket: 1000, StdDev=225040.70, Max/Min=2.27
+  Algo: modulo, Bucket: 2000, StdDev=224211.25, Max/Min=2.27
+  Algo: modulo, Bucket: 4000, StdDev=225897.43, Max/Min=2.28
+  Algo: modulo, Bucket: 8000, StdDev=223687.83, Max/Min=2.26
+  Algo: quotient_remainder, Bucket: 1000, StdDev=224738.07, Max/Min=2.27
+  Algo: quotient_remainder, Bucket: 2000, StdDev=225025.77, Max/Min=2.28
+  Algo: quotient_remainder, Bucket: 4000, StdDev=225825.43, Max/Min=2.28
+  Algo: quotient_remainder, Bucket: 8000, StdDev=225921.86, Max/Min=2.28
+
+Analysis complete. Plots saved to: ./bench-venkat/analysis/advanced-balanced/analysis
+(base) venkat:~/Documents/venkat-github/aibrix % 
+
+fairness and util are 0.5
+
+these are results from april 21 run
+
+here are results from april 23 run:
+python analyze_results.py --input_dir ./bench-venkat/analysis/advanced-balanced
+Loading benchmark data from: ./bench-venkat/analysis/advanced-balanced
+Found 8 files to analyze.
+Loading files: 100%|███████████████████████████████████████████████| 8/8 [00:31<00:00,  3.96s/it]
+Data loaded. Performing analysis...
+
+=== Basic Statistics (Grouped by Algo & Bucket Size) ===
+
+Algorithm: vtc_adaptive_bucket, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.02 to 2.00
+  Mean normalized position: 1.13
+  Std dev of normalized position: 0.61
+  Fairness (Token-Pod Correlation): 0.8421 (p=0.000)
+
+Algorithm: vtc_adaptive_bucket, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.02 to 2.00
+  Mean normalized position: 1.14
+  Std dev of normalized position: 0.61
+  Fairness (Token-Pod Correlation): 0.8434 (p=0.000)
+
+Algorithm: vtc_adaptive_bucket, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.02 to 2.00
+  Mean normalized position: 1.13
+  Std dev of normalized position: 0.60
+  Fairness (Token-Pod Correlation): 0.8428 (p=0.000)
+
+Algorithm: vtc_adaptive_bucket, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.02 to 2.00
+  Mean normalized position: 1.13
+  Std dev of normalized position: 0.61
+  Fairness (Token-Pod Correlation): 0.8423 (p=0.000)
+
+Algorithm: vtc_fixed_bucket, Bucket Size: 1000:
+  Data points: 4000000
+  Normalized position range: 0.34 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.02
+  Fairness (Token-Pod Correlation): 0.0171 (p=0.000)
+
+Algorithm: vtc_fixed_bucket, Bucket Size: 2000:
+  Data points: 4000000
+  Normalized position range: 0.15 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.04
+  Fairness (Token-Pod Correlation): 0.0260 (p=0.000)
+
+Algorithm: vtc_fixed_bucket, Bucket Size: 4000:
+  Data points: 4000000
+  Normalized position range: 0.06 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.06
+  Fairness (Token-Pod Correlation): 0.0377 (p=0.000)
+
+Algorithm: vtc_fixed_bucket, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.02 to 4.00
+  Mean normalized position: 4.00
+  Std dev of normalized position: 0.09
+  Fairness (Token-Pod Correlation): 0.0536 (p=0.000)
+
+Generating distribution plots...
+Analyzing user categories...
+Analyzing token count vs normalized position...
+Analyzing bucket size effects...
+
+Checking monotonicity of fairness score...
+Calculating Monotonicity...
+Monotonicity Groups: 100%|█████████████████████████████████████████| 8/8 [00:30<00:00,  3.78s/it]
+                                                                                                 
+=== Monotonicity Analysis (Fairness Score) ===
+Average % of times fairness score DECREASED when user token sum INCREASED:
+  Algo: vtc_adaptive_bucket, Bucket: 1000, Non-Monotonic: 10.46%
+  Algo: vtc_adaptive_bucket, Bucket: 2000, Non-Monotonic: 10.49%
+  Algo: vtc_adaptive_bucket, Bucket: 4000, Non-Monotonic: 10.36%
+  Algo: vtc_adaptive_bucket, Bucket: 8000, Non-Monotonic: 10.48%
+  Algo: vtc_fixed_bucket, Bucket: 1000, Non-Monotonic: 0.00%
+  Algo: vtc_fixed_bucket, Bucket: 2000, Non-Monotonic: 0.00%
+  Algo: vtc_fixed_bucket, Bucket: 4000, Non-Monotonic: 0.00%
+  Algo: vtc_fixed_bucket, Bucket: 8000, Non-Monotonic: 0.00%
+
+Calculating predictability...
+
+Calculating predictability...
+Predictability Groups: 100%|███████████████████████████████████████| 8/8 [00:06<00:00,  1.31it/s]
+
+=== Predictability Analysis ===
+Average standard deviation of assigned pod (lower is more predictable):
+  Algo: vtc_adaptive_bucket, Bucket: 1000, Predictability: 0.0196
+  Algo: vtc_adaptive_bucket, Bucket: 2000, Predictability: 0.0239
+  Algo: vtc_adaptive_bucket, Bucket: 4000, Predictability: 0.0218
+  Algo: vtc_adaptive_bucket, Bucket: 8000, Predictability: 0.0201
+  Algo: vtc_fixed_bucket, Bucket: 1000, Predictability: 0.0077
+  Algo: vtc_fixed_bucket, Bucket: 2000, Predictability: 0.0166
+  Algo: vtc_fixed_bucket, Bucket: 4000, Predictability: 0.0273
+  Algo: vtc_fixed_bucket, Bucket: 8000, Predictability: 0.0401
+
+Calculating load balance from actual assignments...
+
+Calculating load balance from actual assignments...
+Load Balance Groups: 100%|█████████████████████████████████████████| 8/8 [00:03<00:00,  2.39it/s]
+
+=== Load Balance Analysis (Utilization) ===
+Std Dev and Max/Min Ratio of requests per pod (lower is better):
+  Algo: vtc_adaptive_bucket, Bucket: 1000, StdDev=591889.72, Max/Min=2.66
+  Algo: vtc_adaptive_bucket, Bucket: 2000, StdDev=591129.58, Max/Min=2.66
+  Algo: vtc_adaptive_bucket, Bucket: 4000, StdDev=590345.85, Max/Min=2.65
+  Algo: vtc_adaptive_bucket, Bucket: 8000, StdDev=590815.66, Max/Min=2.65
+  Algo: vtc_fixed_bucket, Bucket: 1000, StdDev=1788538.54, Max/Min=117630.44
+  Algo: vtc_fixed_bucket, Bucket: 2000, StdDev=1788123.75, Max/Min=39986.93
+  Algo: vtc_fixed_bucket, Bucket: 4000, StdDev=1787310.39, Max/Min=13689.17
+  Algo: vtc_fixed_bucket, Bucket: 8000, StdDev=1785727.86, Max/Min=6117.01
+
+=== Adaptive Bucket Analysis ===
+
+Fairness Correlation Comparison (higher is better):
+  Bucket Size 1000: Adaptive=0.8421 vs Fixed=0.0171
+  Bucket Size 2000: Adaptive=0.8434 vs Fixed=0.0260
+  Bucket Size 4000: Adaptive=0.8428 vs Fixed=0.0377
+  Bucket Size 8000: Adaptive=0.8423 vs Fixed=0.0536
+
+Analysis complete. Plots saved to: ./bench-venkat/analysis/advanced-balanced/analysis
+(base) venkat:~/Documents/venkat-github/aibrix % 

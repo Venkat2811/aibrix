@@ -1,0 +1,447 @@
+Analysis started at: 2025-04-23 19:40:09
+Input directory: /home/venkat/Documents/venkat-github/aibrix/bench-venkat/analysis/adaptive-variants/
+Output directory: bench-venkat/analysis/output/analysis_20250423_194009
+Parallel processing: DISABLED (always runs serially)
+Max processes: 1
+
+================================================================================
+
+Found 320 files to analyze.
+Total files to process: 25
+
+
+[1/25] === STARTING FILE 1/25: sim_vtc_adaptive_balanced_b1000_w1000_balanced.csv ===
+Loaded with cuDF in 1.0852 seconds
+  vtc_adaptive_balanced (Bucket: 1000): 9.06% non-monotonic (362519/3999700 pairs)
+[1/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b1000_w1000_balanced.csv
+[1/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b1000_w1000_balanced.csv
+
+[2/25] === STARTING FILE 2/25: sim_vtc_adaptive_balanced_b1000_w2000_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.3773 seconds
+  vtc_adaptive_balanced (Bucket: 1000): 18.03% non-monotonic (720995/3999700 pairs)
+[2/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b1000_w2000_balanced.csv
+[2/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b1000_w2000_balanced.csv
+
+[3/25] === STARTING FILE 3/25: sim_vtc_adaptive_balanced_b1000_w2000_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.5143 seconds
+  vtc_adaptive_balanced (Bucket: 1000): 18.36% non-monotonic (734351/3999700 pairs)
+[3/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b1000_w2000_high_usage.csv
+[3/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b1000_w2000_high_usage.csv
+
+[4/25] === STARTING FILE 4/25: sim_vtc_adaptive_balanced_b1000_w500_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.6356 seconds
+  vtc_adaptive_balanced (Bucket: 1000): 4.38% non-monotonic (175068/3999700 pairs)
+[4/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b1000_w500_balanced.csv
+[4/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b1000_w500_balanced.csv
+
+[5/25] === STARTING FILE 5/25: sim_vtc_adaptive_balanced_b16000_w2000_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.4646 seconds
+  vtc_adaptive_balanced (Bucket: 16000): 24.63% non-monotonic (723835/2938859 pairs)
+[5/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b16000_w2000_high_usage.csv
+[5/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b16000_w2000_high_usage.csv
+
+[6/25] === STARTING FILE 6/25: sim_vtc_adaptive_balanced_b2000_w1000_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.6622 seconds
+  vtc_adaptive_balanced (Bucket: 2000): 9.14% non-monotonic (365526/3999700 pairs)
+[6/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b2000_w1000_balanced.csv
+[6/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b2000_w1000_balanced.csv
+
+[7/25] === STARTING FILE 7/25: sim_vtc_adaptive_balanced_b2000_w500_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.3269 seconds
+  vtc_adaptive_balanced (Bucket: 2000): 4.53% non-monotonic (181123/3999700 pairs)
+[7/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b2000_w500_balanced.csv
+[7/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b2000_w500_balanced.csv
+
+[8/25] === STARTING FILE 8/25: sim_vtc_adaptive_balanced_b4000_w2000_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.3299 seconds
+  vtc_adaptive_balanced (Bucket: 4000): 18.27% non-monotonic (730568/3999700 pairs)
+[8/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b4000_w2000_balanced.csv
+[8/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b4000_w2000_balanced.csv
+
+[9/25] === STARTING FILE 9/25: sim_vtc_adaptive_balanced_b500_w1000_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.6336 seconds
+  vtc_adaptive_balanced (Bucket: 500): 9.10% non-monotonic (363832/3999700 pairs)
+[9/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b500_w1000_high_usage.csv
+[9/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b500_w1000_high_usage.csv
+
+[10/25] === STARTING FILE 10/25: sim_vtc_adaptive_balanced_b500_w500_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.6237 seconds
+  vtc_adaptive_balanced (Bucket: 500): 4.42% non-monotonic (176690/3999700 pairs)
+[10/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b500_w500_balanced.csv
+[10/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b500_w500_balanced.csv
+
+[11/25] === STARTING FILE 11/25: sim_vtc_adaptive_balanced_b8000_w2000_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+Loaded with cuDF in 0.7564 seconds
+  vtc_adaptive_balanced (Bucket: 8000): 18.31% non-monotonic (732199/3999700 pairs)
+[11/25] FILE ANALYZED: sim_vtc_adaptive_balanced_b8000_w2000_balanced.csv
+[11/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b8000_w2000_balanced.csv
+
+[12/25] === STARTING FILE 12/25: sim_vtc_adaptive_balanced_b8000_w2000_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[12/25] GPU OOM on sim_vtc_adaptive_balanced_b8000_w2000_high_usage.csv. Retrying with two half-size chunks.
+[12/25] GPU OOM on sim_vtc_adaptive_balanced_b8000_w2000_high_usage.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.05s (pandas) + 0.61s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.05s, rows=2000000
+chunk 1/2 analysed in 1.03s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.23s (pandas) + 0.58s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.23s, rows=2000000
+chunk 2/2 analysed in 1.04s
+[12/25] Successfully analyzed sim_vtc_adaptive_balanced_b8000_w2000_high_usage.csv in chunks
+[12/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b8000_w2000_high_usage.csv
+
+[13/25] === STARTING FILE 13/25: sim_vtc_adaptive_balanced_b8000_w500_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[13/25] GPU OOM on sim_vtc_adaptive_balanced_b8000_w500_balanced.csv. Retrying with two half-size chunks.
+[13/25] GPU OOM on sim_vtc_adaptive_balanced_b8000_w500_balanced.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.00s (pandas) + 0.58s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.00s, rows=2000000
+chunk 1/2 analysed in 1.04s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.16s (pandas) + 0.58s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.16s, rows=2000000
+chunk 2/2 analysed in 1.07s
+[13/25] Successfully analyzed sim_vtc_adaptive_balanced_b8000_w500_balanced.csv in chunks
+[13/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_b8000_w500_balanced.csv
+
+[14/25] === STARTING FILE 14/25: sim_vtc_adaptive_balanced_min2500_b1000_w1000_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[14/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b1000_w1000_balanced.csv. Retrying with two half-size chunks.
+[14/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b1000_w1000_balanced.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.07s (pandas) + 0.58s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.07s, rows=2000000
+chunk 1/2 analysed in 1.04s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.37s (pandas) + 0.58s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.37s, rows=2000000
+chunk 2/2 analysed in 1.04s
+[14/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b1000_w1000_balanced.csv in chunks
+[14/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b1000_w1000_balanced.csv
+
+[15/25] === STARTING FILE 15/25: sim_vtc_adaptive_balanced_min2500_b1000_w1000_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[15/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b1000_w1000_high_usage.csv. Retrying with two half-size chunks.
+[15/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b1000_w1000_high_usage.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.15s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.15s, rows=2000000
+chunk 1/2 analysed in 1.07s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.43s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.43s, rows=2000000
+chunk 2/2 analysed in 1.06s
+[15/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b1000_w1000_high_usage.csv in chunks
+[15/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b1000_w1000_high_usage.csv
+
+[16/25] === STARTING FILE 16/25: sim_vtc_adaptive_balanced_min2500_b16000_w2000_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[16/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b16000_w2000_high_usage.csv. Retrying with two half-size chunks.
+[16/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b16000_w2000_high_usage.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.11s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.11s, rows=2000000
+chunk 1/2 analysed in 1.07s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.33s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.33s, rows=2000000
+chunk 2/2 analysed in 1.06s
+[16/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b16000_w2000_high_usage.csv in chunks
+[16/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b16000_w2000_high_usage.csv
+
+[17/25] === STARTING FILE 17/25: sim_vtc_adaptive_balanced_min2500_b4000_w1000_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[17/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b4000_w1000_balanced.csv. Retrying with two half-size chunks.
+[17/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b4000_w1000_balanced.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.06s (pandas) + 0.59s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.06s, rows=2000000
+chunk 1/2 analysed in 1.05s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.35s (pandas) + 0.59s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.35s, rows=2000000
+chunk 2/2 analysed in 1.07s
+[17/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b4000_w1000_balanced.csv in chunks
+[17/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b4000_w1000_balanced.csv
+
+[18/25] === STARTING FILE 18/25: sim_vtc_adaptive_balanced_min2500_b4000_w1000_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[18/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b4000_w1000_high_usage.csv. Retrying with two half-size chunks.
+[18/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b4000_w1000_high_usage.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.17s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.17s, rows=2000000
+chunk 1/2 analysed in 1.07s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.30s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.30s, rows=2000000
+chunk 2/2 analysed in 1.09s
+[18/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b4000_w1000_high_usage.csv in chunks
+[18/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b4000_w1000_high_usage.csv
+
+[19/25] === STARTING FILE 19/25: sim_vtc_adaptive_balanced_min2500_b4000_w2000_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[19/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b4000_w2000_balanced.csv. Retrying with two half-size chunks.
+[19/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b4000_w2000_balanced.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.08s (pandas) + 0.59s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.08s, rows=2000000
+chunk 1/2 analysed in 1.08s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.52s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.52s, rows=2000000
+chunk 2/2 analysed in 1.08s
+[19/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b4000_w2000_balanced.csv in chunks
+[19/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b4000_w2000_balanced.csv
+
+[20/25] === STARTING FILE 20/25: sim_vtc_adaptive_balanced_min2500_b4000_w500_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[20/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b4000_w500_high_usage.csv. Retrying with two half-size chunks.
+[20/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b4000_w500_high_usage.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.23s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.23s, rows=2000000
+chunk 1/2 analysed in 1.05s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.38s (pandas) + 0.61s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.38s, rows=2000000
+chunk 2/2 analysed in 1.04s
+[20/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b4000_w500_high_usage.csv in chunks
+[20/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b4000_w500_high_usage.csv
+
+[21/25] === STARTING FILE 21/25: sim_vtc_adaptive_balanced_min2500_b500_w1000_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[21/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b500_w1000_balanced.csv. Retrying with two half-size chunks.
+[21/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b500_w1000_balanced.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.19s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.19s, rows=2000000
+chunk 1/2 analysed in 1.10s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.56s (pandas) + 0.59s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.56s, rows=2000000
+chunk 2/2 analysed in 1.05s
+[21/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b500_w1000_balanced.csv in chunks
+[21/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b500_w1000_balanced.csv
+
+[22/25] === STARTING FILE 22/25: sim_vtc_adaptive_balanced_min2500_b500_w500_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[22/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b500_w500_balanced.csv. Retrying with two half-size chunks.
+[22/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b500_w500_balanced.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.24s (pandas) + 0.59s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.24s, rows=2000000
+chunk 1/2 analysed in 1.05s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.30s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.30s, rows=2000000
+chunk 2/2 analysed in 1.05s
+[22/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b500_w500_balanced.csv in chunks
+[22/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b500_w500_balanced.csv
+
+[23/25] === STARTING FILE 23/25: sim_vtc_adaptive_balanced_min2500_b500_w500_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[23/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b500_w500_high_usage.csv. Retrying with two half-size chunks.
+[23/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b500_w500_high_usage.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.33s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.33s, rows=2000000
+chunk 1/2 analysed in 1.06s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.47s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.47s, rows=2000000
+chunk 2/2 analysed in 1.06s
+[23/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b500_w500_high_usage.csv in chunks
+[23/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b500_w500_high_usage.csv
+
+[24/25] === STARTING FILE 24/25: sim_vtc_adaptive_balanced_min2500_b8000_w1000_balanced.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[24/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b8000_w1000_balanced.csv. Retrying with two half-size chunks.
+[24/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b8000_w1000_balanced.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.62s (pandas) + 0.59s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.62s, rows=2000000
+chunk 1/2 analysed in 1.04s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.49s (pandas) + 0.59s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.49s, rows=2000000
+chunk 2/2 analysed in 1.04s
+[24/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b8000_w1000_balanced.csv in chunks
+[24/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b8000_w1000_balanced.csv
+
+[25/25] === STARTING FILE 25/25: sim_vtc_adaptive_balanced_min2500_b8000_w2000_high_usage.csv ===
+Sleeping for 2 seconds before processing next file to allow memory cleanup...
+[25/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b8000_w2000_high_usage.csv. Retrying with two half-size chunks.
+[25/25] GPU OOM on sim_vtc_adaptive_balanced_min2500_b8000_w2000_high_usage.csv. Trying pandas+cudf approach.
+File rows (excl. header): 4000000 -> chunk size 2000000
+→ Loading chunk 1/2 with pandas (start=0, rows=2000000)
+chunk 1/2 loaded in 3.27s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 1/2 loaded in 3.27s, rows=2000000
+chunk 1/2 analysed in 1.06s
+→ Loading chunk 2/2 with pandas (start=2000000, rows=2000000)
+chunk 2/2 loaded in 4.55s (pandas) + 0.60s (to cudf), rows=2000000
+chunk 2/2 loaded in 4.55s, rows=2000000
+chunk 2/2 analysed in 1.04s
+[25/25] Successfully analyzed sim_vtc_adaptive_balanced_min2500_b8000_w2000_high_usage.csv in chunks
+[25/25] MEMORY FREED: After full analysis of sim_vtc_adaptive_balanced_min2500_b8000_w2000_high_usage.csv
+Error combining dataframes: std::bad_alloc: out_of_memory: CUDA error (failed to allocate 205535088 bytes) at: /tmp/pip-build-env-rstxswsq/normal/lib/python3.10/site-packages/librmm/include/rmm/mr/device/cuda_memory_resource.hpp:62: cudaErrorMemoryAllocation out of memory. Falling back to pandas.
+Fell back to pandas for combined analysis due to error
+Saved combined data to bench-venkat/analysis/output/analysis_20250423_194009/comparison_data/combined_data.csv (using pandas fallback)
+Data loaded. Performing analysis...
+
+Reinitialized GPU memory before global analysis
+
+=== Basic Statistics (Grouped by Algo & Bucket Size) ===
+
+Found 6 unique algorithm/bucket size combinations for analysis
+Processing global stats for vtc_adaptive_balanced, bucket size 2000...
+Processing global stats for vtc_adaptive_balanced, bucket size 1000...
+Processing global stats for vtc_adaptive_balanced, bucket size 8000...
+Processing global stats for vtc_adaptive_balanced, bucket size 16000...
+Processing global stats for vtc_adaptive_balanced, bucket size 500...
+Processing global stats for vtc_adaptive_balanced, bucket size 4000...
+Algorithm: vtc_adaptive_balanced, Bucket Size: 8000:
+  Data points: 4000000
+  Normalized position range: 0.01 to 2.00
+  Mean normalized position: 0.80
+  Std dev of normalized position: 0.46
+  Fairness (Token-Pod Correlation): 0.8440 (p=0.000)
+
+
+Analyzing normalized position distributions...
+Processing normalized position distribution for vtc_adaptive_balanced...
+
+Checking monotonicity of fairness score...
+
+Checking monotonicity...
+Processing monotonicity for vtc_adaptive_balanced, bucket size 2000...
+Processing monotonicity for vtc_adaptive_balanced, bucket size 1000...
+Processing monotonicity for vtc_adaptive_balanced, bucket size 8000...
+Processing monotonicity for vtc_adaptive_balanced, bucket size 16000...
+Processing monotonicity for vtc_adaptive_balanced, bucket size 500...
+Processing monotonicity for vtc_adaptive_balanced, bucket size 4000...
+
+Calculating load balance from actual assignments...
+
+Load balance for vtc_adaptive_balanced (Bucket: 500):
+  Min load: 0.00
+  Max load: 0.00
+  Mean load: 0.00
+  Std dev: 0.00
+  Load balance ratio (max/min): 0.00
+  Coefficient of variation (std/mean): 0.0000
+
+Load balance for vtc_adaptive_balanced (Bucket: 1000):
+  Min load: 0.00
+  Max load: 0.00
+  Mean load: 0.00
+  Std dev: 0.00
+  Load balance ratio (max/min): 0.00
+  Coefficient of variation (std/mean): 0.0000
+
+Load balance for vtc_adaptive_balanced (Bucket: 2000):
+  Min load: 0.00
+  Max load: 0.00
+  Mean load: 0.00
+  Std dev: 0.00
+  Load balance ratio (max/min): 0.00
+  Coefficient of variation (std/mean): 0.0000
+
+Load balance for vtc_adaptive_balanced (Bucket: 4000):
+  Min load: 0.00
+  Max load: 0.00
+  Mean load: 0.00
+  Std dev: 0.00
+  Load balance ratio (max/min): 0.00
+  Coefficient of variation (std/mean): 0.0000
+
+Load balance for vtc_adaptive_balanced (Bucket: 8000):
+  Min load: 0.00
+  Max load: 0.00
+  Mean load: 0.00
+  Std dev: 0.00
+  Load balance ratio (max/min): 0.00
+  Coefficient of variation (std/mean): 0.0000
+
+Load balance for vtc_adaptive_balanced (Bucket: 16000):
+  Min load: 0.00
+  Max load: 0.00
+  Mean load: 0.00
+  Std dev: 0.00
+  Load balance ratio (max/min): 0.00
+  Coefficient of variation (std/mean): 0.0000
+
+=== Analysis Summary ===
+
+Analyzed 11 CSV files:
+  - sim_vtc_adaptive_balanced_b1000_w1000_balanced (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b1000_w1000_balanced)
+  - sim_vtc_adaptive_balanced_b1000_w2000_balanced (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b1000_w2000_balanced)
+  - sim_vtc_adaptive_balanced_b1000_w2000_high_usage (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b1000_w2000_high_usage)
+  - sim_vtc_adaptive_balanced_b1000_w500_balanced (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b1000_w500_balanced)
+  - sim_vtc_adaptive_balanced_b16000_w2000_high_usage (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b16000_w2000_high_usage)
+  - sim_vtc_adaptive_balanced_b2000_w1000_balanced (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b2000_w1000_balanced)
+  - sim_vtc_adaptive_balanced_b2000_w500_balanced (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b2000_w500_balanced)
+  - sim_vtc_adaptive_balanced_b4000_w2000_balanced (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b4000_w2000_balanced)
+  - sim_vtc_adaptive_balanced_b500_w1000_high_usage (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b500_w1000_high_usage)
+  - sim_vtc_adaptive_balanced_b500_w500_balanced (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b500_w500_balanced)
+  - sim_vtc_adaptive_balanced_b8000_w2000_balanced (Output directory: bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b8000_w2000_balanced)
+Found 1 adaptive variants: vtc_adaptive_balanced
+
+Fairness Correlation Comparison (higher is better):
+  Balanced (0.5/0.5) (Bucket Size 8000): 0.8440 (p=0.000)
+
+Monotonicity Comparison:
+  Balanced (0.5/0.5) (Bucket Size 8000): 4.51% non-monotonic (180526/3999400 pairs)
+  Balanced (0.5/0.5) (Bucket Size 500): 4.48% non-monotonic (179060/3999400 pairs)
+  Balanced (0.5/0.5) (Bucket Size 1000): 9.22% non-monotonic (368551/3999400 pairs)
+  Balanced (0.5/0.5) (Bucket Size 4000): 4.61% non-monotonic (184567/3999400 pairs)
+  Balanced (0.5/0.5) (Bucket Size 8000): 18.24% non-monotonic (729490/3999400 pairs)
+  Balanced (0.5/0.5) (Bucket Size 16000): 18.03% non-monotonic (721248/3999400 pairs)
+
+Load Balance Comparison:
+  Balanced (0.5/0.5) (Bucket Size 500): StdDev=1192903.92, Max/Min=2.54
+  Balanced (0.5/0.5) (Bucket Size 1000): StdDev=2191272.43, Max/Min=2.03
+  Balanced (0.5/0.5) (Bucket Size 2000): StdDev=1129047.81, Max/Min=2.25
+  Balanced (0.5/0.5) (Bucket Size 4000): StdDev=566965.47, Max/Min=2.26
+  Balanced (0.5/0.5) (Bucket Size 8000): StdDev=567976.06, Max/Min=2.26
+  Balanced (0.5/0.5) (Bucket Size 16000): StdDev=617182.76, Max/Min=5.17
+
+Analysis complete. Results saved to:
+  bench-venkat/analysis/output/analysis_20250423_194009 (Main output directory)
+  bench-venkat/analysis/output/analysis_20250423_194009/analysis_log.txt (Main log file)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b1000_w1000_balanced (Results for sim_vtc_adaptive_balanced_b1000_w1000_balanced)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b1000_w2000_balanced (Results for sim_vtc_adaptive_balanced_b1000_w2000_balanced)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b1000_w2000_high_usage (Results for sim_vtc_adaptive_balanced_b1000_w2000_high_usage)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b1000_w500_balanced (Results for sim_vtc_adaptive_balanced_b1000_w500_balanced)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b16000_w2000_high_usage (Results for sim_vtc_adaptive_balanced_b16000_w2000_high_usage)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b2000_w1000_balanced (Results for sim_vtc_adaptive_balanced_b2000_w1000_balanced)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b2000_w500_balanced (Results for sim_vtc_adaptive_balanced_b2000_w500_balanced)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b4000_w2000_balanced (Results for sim_vtc_adaptive_balanced_b4000_w2000_balanced)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b500_w1000_high_usage (Results for sim_vtc_adaptive_balanced_b500_w1000_high_usage)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b500_w500_balanced (Results for sim_vtc_adaptive_balanced_b500_w500_balanced)
+  bench-venkat/analysis/output/analysis_20250423_194009/sim_vtc_adaptive_balanced_b8000_w2000_balanced (Results for sim_vtc_adaptive_balanced_b8000_w2000_balanced)
