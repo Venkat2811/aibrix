@@ -61,6 +61,34 @@ RANDOM_FACTOR_SCALE = 0.1
 min_tokens = 100.0  # Minimum reasonable token count
 max_tokens = 10000.0  # Default maximum token count
 
+# =====================================================================
+# BENCHMARK SIMULATION OVERVIEW:
+#
+# 1. Initial Setup:
+#    - Three traffic patterns tested independently:
+#      * Balanced: Even distribution (20% low, 50% medium, 30% high, 0% extreme) with low burstiness (0.1-0.3)
+#      * High_Usage: More high users (10% low, 30% medium, 50% high, 10% extreme) with moderate burstiness (0.1-0.4)
+#      * Bursty: Mixed distribution (30% low, 40% medium, 20% high, 10% extreme) with high burstiness (0.6-0.9)
+#    - Each category has defined burstiness and token generation characteristics
+#
+# 2. Simulation Process:
+#    - 300 users permanently assigned to categories (low/medium/high/extreme)
+#    - Runs for 4000 steps, each step processing 1000 requests (think of it as 1k RPM)
+#    - For each step:
+#      a. User Selection: Check all 300 users against their burstiness probability
+#         (e.g., "high" users in bursty pattern have 80% chance of making a request)
+#      b. Token Generation: Selected users generate tokens based on category
+#         (e.g., "low": ~20 input/300 output, "extreme": ~150 input/6000 output)
+#      c. Window Tracking: Tokens tracked in sliding window (500/1000/2000 steps)
+#      d. Pod Selection: VTC algorithm routes requests using hybrid scoring
+#      e. Load Decay: Pod loads decay by factor of 0.995 to simulate completions
+#
+# 3. Analysis Metrics:
+#    - Fairness Correlation: How strongly pod assignments correlate with token counts
+#    - Monotonicity: Percentage of routing decisions that maintain expected ordering
+#    - Load Distribution: How evenly requests are distributed across pods
+# =====================================================================
+
 # Define algorithm function
 def vtc_adaptive_bucket(tokens, npods, bsize, min_tok, max_tok, min_threshold=1000):
     """Adaptive bucket size using min/max token values"""
