@@ -5,7 +5,11 @@ Just stashing it here for now
 ### refer to:
 - benchmark_mp_advanced.py - Simulation implementation
 - analyze_results_gpu.py - Analysis with GPU acceleration
-- results/ - Raw data and analysis logs
+- results/ - Basic statistics & Summary analysis
+  - `run1--different-algos` - Analysis on different algorithms.  Points out that clamped linear is simple yet superior.
+  - `run2--clamped_linear--several_variations` - Analysis on clamped linear with several variations. 
+  - `run3--clamped_linear--several_variations` - Analysis on clamped linear with balanced and equal weights. 
+
 
 ### Note
 Benchmark simulation & analysis was done with aid of several LLMs. I monitored changes,analyzed results closely and verified them at each step.
