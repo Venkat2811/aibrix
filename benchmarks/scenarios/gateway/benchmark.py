@@ -53,8 +53,8 @@ class BenchmarkUser(HttpUser):
     index_lock: Lock
     request_index: int
     output_file: str
-
-    wait_time = between(1, 3)  # Adjust as needed
+    
+    wait_time = between(1, 3)  # Default behavior
 
     def on_start(self):
         self.model = os.getenv("MODEL", "llama2-70b")
@@ -63,6 +63,8 @@ class BenchmarkUser(HttpUser):
         self.num_requests = int(os.getenv("NUM_REQUESTS", 20))
         self.request_index = 0  # Initialize request index
         self.index_lock = threading.Lock()  # Initialize a lock for thread safety
+            
+        # Load prompts
         tokenizer = get_tokenizer('deepseek-ai/deepseek-coder-7b-instruct', trust_remote_code=True)
         input_requests = sample_sharegpt_requests(
             dataset_path='/tmp/ShareGPT_V3_unfiltered_cleaned_split.json',
@@ -71,6 +73,8 @@ class BenchmarkUser(HttpUser):
             fixed_output_len=256,  # filter out too large output query which may overflow the model
         )
         self.prompts = list(map(lambda x: x[0], input_requests))
+    
+
 
     @task
     def send_request(self):
@@ -89,17 +93,39 @@ class BenchmarkUser(HttpUser):
             if self.routing_strategy:
                 headers["routing-strategy"] = self.routing_strategy
 
+            # Record dispatch time for TTFT calculation
+            dispatch_time = time.time()
+            
             response = self.client.post("/v1/chat/completions", json={
                 "model": self.model,
                 "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.0
-            }, headers=headers)
-
-            # Convert response text to JSON
-            response_json = response.json()
-
+                "temperature": 0.0,
+                "stream": True  # Enable streaming to measure TTFT
+            }, headers=headers, stream=True)
+            
+            # Process streaming response to capture TTFT
+            first_response_time = None
+            chunks = []
+            
+            for chunk in response.iter_lines():
+                if chunk and chunk.strip():
+                    # Record time of first token
+                    if first_response_time is None:
+                        first_response_time = time.time()
+                    chunks.append(chunk.decode('utf-8'))
+            
+            # Calculate TTFT if we got a streaming response
+            ttft = None
+            if first_response_time is not None:
+                ttft = first_response_time - dispatch_time
+            
             # Calculate latency and metrics
             latency = time.time() - start_time
+            
+            # Parse the complete response from chunks
+            response_text = ''.join(chunks)
+            response_json = json.loads(response_text)
+            
             prompt_tokens = response_json["usage"]["prompt_tokens"]
             output_tokens = response_json["usage"]["completion_tokens"]
             total_tokens = response_json["usage"]["total_tokens"]
@@ -116,13 +142,17 @@ class BenchmarkUser(HttpUser):
                 "total_tokens": total_tokens,
                 "latency": latency,
                 "throughput": throughput,
+                "ttft": ttft,
+                "timestamp": time.time(),
+                "routing_strategy": self.routing_strategy
             }
 
             # Write result to a file after each request
             with open(self.output_file, "a") as outfile:
                 json.dump(result, outfile)
                 outfile.write("\n")  # Newline for JSONL format
-            print(f"Response: {output_text}\n")
+            
+            print(f"Response: {output_text[:100]}... (TTFT: {ttft:.3f}s if ttft is not None else 'N/A')")
 
             # # Optional: Stop after reaching the desired number of requests
             # if self.request_index >= self.num_requests:
