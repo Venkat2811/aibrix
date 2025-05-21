@@ -42,6 +42,17 @@ cd /path/to/aibrix
 python benchmarks/scenarios/gateway/vtc-basic-routing/run_benchmark.py
 ```
 
+### Using ShareGPT Data (Recommended)
+
+By default, the benchmark now uses ShareGPT data instead of synthetic data for more realistic testing:
+
+```bash
+# Run the benchmark with ShareGPT data
+./benchmarks/scenarios/gateway/vtc-basic-routing/run_with_sharegpt.sh
+```
+
+This script automatically downloads the ShareGPT dataset (if not already present) and runs the benchmark. The ShareGPT dataset provides real-world conversation patterns which better simulate actual usage.
+
 ## Customizing the Benchmark
 
 The benchmark can be customized via the `config.yaml` file. Key parameters include:
@@ -50,6 +61,7 @@ The benchmark can be customized via the `config.yaml` file. Key parameters inclu
 - `output_token_limit`: Maximum output token length
 - `duration_ms`: Duration of the benchmark in milliseconds
 - `target_qps`: Target queries per second
+- `prompt_type`: Set to "sharegpt" for real-world data or "synthetic_multiturn" for synthetic data
 
 User distribution is defined in the `add_user_categories` function in `run_benchmark.py`. The default distribution is:
 

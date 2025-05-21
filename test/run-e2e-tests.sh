@@ -94,4 +94,12 @@ collect_logs() {
 
 trap "collect_logs" ERR
 
-go test ./test/e2e/ -v -timeout 0
+echo "\n\033[1;33mEnvironment is ready for testing.\033[0m"
+echo "Run your tests with: go test ./test/e2e/ -v -timeout 0"
+echo "\nType 'YES' to clean up and exit when you're done testing: "
+read answer
+if [ "$answer" = "YES" ]; then
+  echo "Cleaning up and exiting..."
+else
+  echo "Exiting without cleanup. Remember to clean up manually."
+fi
