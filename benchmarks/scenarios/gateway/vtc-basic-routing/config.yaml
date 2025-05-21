@@ -1,6 +1,6 @@
 # VTC-basic Routing Benchmark Configuration
 endpoint: "${api_endpoint:-http://localhost:8888}"
-api_key: "${api_key}"
+api_key: "${api_key:-}"
 target_model: "tinyllama"
 client_pool_size: 64
 output_token_limit: 64

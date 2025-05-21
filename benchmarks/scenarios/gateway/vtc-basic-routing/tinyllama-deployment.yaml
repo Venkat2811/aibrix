@@ -19,7 +19,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: vllm-cpu
-          image: vllm-cpu
+          image: vllm-cpu:latest
           imagePullPolicy: IfNotPresent
           command:
             - python3
@@ -33,10 +33,6 @@ spec:
             - "0.0.0.0"
             - --port
             - "8000"
-            - --trust-remote-code
-            - --max-model-len
-            - "2048"
-            - --disable-log-stats
           env:
             - name: VLLM_USE_CPU
               value: "1"
