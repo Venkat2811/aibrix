@@ -1,0 +1,78 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tinyllama
+  namespace: aibrix-system
+  labels:
+    model.aibrix.ai/name: tinyllama
+    model.aibrix.ai/port: "8000"
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      model.aibrix.ai/name: tinyllama
+  template:
+    metadata:
+      labels:
+        model.aibrix.ai/name: tinyllama
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: vllm-cpu
+          image: vllm-cpu
+          imagePullPolicy: IfNotPresent
+          command:
+            - python3
+            - -m
+            - vllm.entrypoints.openai.api_server
+            - --model
+            - TinyLlama/TinyLlama-1.1B-Chat-v1.0
+            - --device
+            - cpu
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --trust-remote-code
+            - --max-model-len
+            - "2048"
+            - --disable-log-stats
+          env:
+            - name: VLLM_USE_CPU
+              value: "1"
+            - name: CUDA_VISIBLE_DEVICES
+              value: ""
+            - name: VLLM_DISABLE_PIN_MEMORY
+              value: "1"
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tinyllama
+  namespace: aibrix-system
+  labels:
+    model.aibrix.ai/name: tinyllama
+spec:
+  type: LoadBalancer
+  selector:
+    model.aibrix.ai/name: tinyllama
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http 
