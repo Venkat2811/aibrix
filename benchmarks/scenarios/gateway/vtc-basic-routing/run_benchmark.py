@@ -23,46 +23,36 @@ logger = logging.getLogger(__name__)
 
 def add_user_categories(workload_file, output_file=None):
     """
-    Add user categories to the workload for VTC routing.
+    Add specific user categories to the workload for VTC routing.
+    Uses exactly 6 users: 2 small, 2 medium, and 2 high users.
     """
     if output_file is None:
         output_file = workload_file.replace(".jsonl", "_with_users.jsonl")
 
-    # Define user categories
-    user_categories = [
-        {"name": "low_user", "proportion": 0.3, "token_scale": 1.0},
-        {"name": "medium_user", "proportion": 0.4, "token_scale": 2.0},
-        {"name": "high_user", "proportion": 0.2, "token_scale": 4.0},
-        {"name": "extreme_user", "proportion": 0.1, "token_scale": 8.0},
+    # Define 6 specific users with their categories and token scales
+    users = [
+        {"id": "user-small-1", "category": "small", "token_scale": 1.0},
+        {"id": "user-small-2", "category": "small", "token_scale": 1.0},
+        {"id": "user-med-1", "category": "medium", "token_scale": 3.0},
+        {"id": "user-med-2", "category": "medium", "token_scale": 3.0},
+        {"id": "user-high-1", "category": "high", "token_scale": 6.0},
+        {"id": "user-high-2", "category": "high", "token_scale": 6.0},
     ]
-
-    # Create user pool
-    users = []
-    for category in user_categories:
-        num_users = int(50 * category["proportion"])  # Aim for ~50 users total
-        for i in range(num_users):
-            users.append(
-                {
-                    "id": f"{category['name']}_{i}",
-                    "category": category["name"],
-                    "token_scale": category["token_scale"],
-                }
-            )
 
     # Process workload file
     modified_workload = []
     total_requests = 0
+    user_request_counts = {user["id"]: 0 for user in users}
 
     with open(workload_file, "r") as f:
         for line in f:
             entry = json.loads(line)
 
             if "requests" in entry:
-                for req in entry["requests"]:
-                    # Assign random user from pool using weighted random selection
-                    import random
-
-                    user = random.choice(users)
+                # Distribute requests evenly across the 6 users in a round-robin fashion
+                for req_index, req in enumerate(entry["requests"]):
+                    # Select user in round-robin fashion
+                    user = users[req_index % len(users)]
 
                     # Set user header
                     req["user"] = user["id"]
@@ -74,6 +64,7 @@ def add_user_categories(workload_file, output_file=None):
                             req["output_length"] * user["token_scale"]
                         )
 
+                    user_request_counts[user["id"]] += 1
                     total_requests += 1
 
             modified_workload.append(entry)
@@ -84,6 +75,9 @@ def add_user_categories(workload_file, output_file=None):
             f.write(json.dumps(entry) + "\n")
 
     logger.info(f"Added user categories to workload. Total requests: {total_requests}")
+    logger.info("Request distribution by user:")
+    for user_id, count in user_request_counts.items():
+        logger.info(f"  {user_id}: {count} requests")
     logger.info(f"Modified workload saved to {output_file}")
 
     return output_file
