@@ -240,9 +240,18 @@ install-in-kind:
 	make docker-build-all
 	kind load docker-image aibrix/controller-manager:nightly aibrix/gateway-plugins:nightly aibrix/metadata-service:nightly aibrix/runtime:nightly
 
+	# Apply base configurations first
 	kubectl apply -k config/dependency --server-side
-	kubectl apply -k config/test
+
+	# Apply monitoring configurations
 	kubectl apply -k config/prometheus
+	kubectl apply -f observability/monitor/service_monitor_controller_manager.yaml
+	kubectl apply -f observability/monitor/envoy_metrics_service.yaml
+	kubectl apply -f observability/monitor/service_monitor_gateway_plugin.yaml
+	kubectl apply -f observability/monitor/service_monitor_vllm.yaml
+
+	# Apply test configurations last
+	kubectl apply -k config/test
 
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
