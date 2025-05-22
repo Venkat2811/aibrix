@@ -25,6 +25,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"google.golang.org/grpc"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -41,11 +42,13 @@ import (
 )
 
 var (
-	grpc_port int
+	grpc_port    int
+	metrics_port int
 )
 
 func main() {
 	flag.IntVar(&grpc_port, "port", 50052, "gRPC port")
+	flag.IntVar(&metrics_port, "metrics-port", 8080, "Metrics HTTP port")
 	klog.InitFlags(flag.CommandLine)
 	defer klog.Flush()
 	flag.Parse()
@@ -104,9 +107,21 @@ func main() {
 
 	klog.Info("starting gRPC server on port :50052")
 
+	// Start profiling server
 	go func() {
 		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
 			klog.Fatalf("failed to setup profiling: %v", err)
+		}
+	}()
+
+	// Start metrics server
+	go func() {
+		metricsMux := http.NewServeMux()
+		metricsMux.Handle("/metrics", promhttp.Handler())
+		metricsAddr := fmt.Sprintf(":%d", metrics_port)
+		klog.Infof("Starting metrics server on %s", metricsAddr)
+		if err := http.ListenAndServe(metricsAddr, metricsMux); err != nil {
+			klog.Fatalf("failed to start metrics server: %v", err)
 		}
 	}()
 
