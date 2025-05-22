@@ -236,6 +236,14 @@ ifndef ignore-not-found
   ignore-not-found = true
 endif
 
+install-in-kind:
+	make docker-build-all
+	kind load docker-image aibrix/controller-manager:nightly aibrix/gateway-plugins:nightly aibrix/metadata-service:nightly aibrix/runtime:nightly
+
+	kubectl apply -k config/dependency --server-side
+	kubectl apply -k config/test
+	kubectl apply -k config/prometheus
+
 .PHONY: install
 install: manifests kustomize ## Install CRDs into the K8s cluster specified in ~/.kube/config.
     ## helm creates objects without aibrix prefix, hence deploying gateway components outside of kustomization
