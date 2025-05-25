@@ -1,0 +1,180 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tinyllama
+  namespace: aibrix-system
+  labels:
+    model.aibrix.ai/name: tinyllama-1-1b-chat-v1-0
+    model.aibrix.ai/port: "8000"
+spec:
+  replicas: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      model.aibrix.ai/name: tinyllama-1-1b-chat-v1-0
+  template:
+    metadata:
+      labels:
+        model.aibrix.ai/name: tinyllama-1-1b-chat-v1-0
+    spec:
+      terminationGracePeriodSeconds: 60
+      nodeSelector:
+        kubernetes.io/hostname: kind-worker
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: model.aibrix.ai/name
+                  operator: In
+                  values:
+                  - tinyllama-1-1b-chat-v1-0
+              topologyKey: kubernetes.io/hostname
+      containers:
+        - name: vllm-cpu
+          image: vllm-cpu:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - python3
+            - -m
+            - vllm.entrypoints.openai.api_server
+            - --model
+            - TinyLlama/TinyLlama-1.1B-Chat-v1.0
+            - --served-model-name
+            - tinyllama-1-1b-chat-v1-0
+            - --device
+            - cpu
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "8000"
+            - --max-model-len
+            - "2048"
+            - --no-enable-chunked-prefill
+            - --disable-log-requests
+          env:
+            - name: VLLM_USE_CPU
+              value: "1"
+            - name: CUDA_VISIBLE_DEVICES
+              value: ""
+            - name: HF_HUB_OFFLINE
+              value: "1"
+            - name: TRANSFORMERS_OFFLINE
+              value: "1"
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          volumeMounts:
+            - name: hf-cache
+              mountPath: /root/.cache/huggingface
+      volumes:
+        - name: hf-cache
+          hostPath:
+            path: /root/.cache/huggingface
+            type: Directory
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: tinyllama-pdb
+  namespace: aibrix-system
+spec:
+  minAvailable: 3
+  selector:
+    matchLabels:
+      model.aibrix.ai/name: tinyllama-1-1b-chat-v1-0
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: tinyllama-1-1b-chat-v1-0
+  namespace: aibrix-system
+  labels:
+    model.aibrix.ai/name: tinyllama-1-1b-chat-v1-0
+    prometheus-discovery: "true"
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+    prometheus.io/scheme: "http"
+spec:
+  type: LoadBalancer
+  selector:
+    model.aibrix.ai/name: tinyllama-1-1b-chat-v1-0
+  ports:
+    - port: 8000
+      targetPort: 8000
+      protocol: TCP
+      name: http
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: tinyllama-1.1b-chat-v1.0-router
+  namespace: aibrix-system
+spec:
+  parentRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: aibrix-eg
+      namespace: aibrix-system
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: tinyllama-1-1b-chat-v1-0
+          namespace: aibrix-system
+          port: 8000
+          weight: 1
+      matches:
+        - headers:
+            - name: model
+              type: Exact
+              value: tinyllama-1-1b-chat-v1-0
+          path:
+            type: PathPrefix
+            value: /v1/completions
+        - headers:
+            - name: model
+              type: Exact
+              value: tinyllama-1-1b-chat-v1-0
+          path:
+            type: PathPrefix
+            value: /v1/chat/completions
+      timeouts:
+        request: 120s
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: tinyllama-metrics
+  namespace: aibrix-system
+  labels:
+    model.aibrix.ai/name: tinyllama-1-1b-chat-v1-0
+spec:
+  selector:
+    matchLabels:
+      model.aibrix.ai/name: tinyllama-1-1b-chat-v1-0
+  endpoints:
+  - port: http
+    interval: 15s
+    path: /metrics
