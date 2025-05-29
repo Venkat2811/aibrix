@@ -55,3 +55,6 @@ development/simulator/cache
 
 .VTC-artifact/
 benchmarks/scenarios/.venkat-vtc-bench/
+.*.pid
+benchmarks/plot/aibrix0.3-routing/vtc-basic/bench/temp_workspace
+.jupyter*

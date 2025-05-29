@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/vllm-project/aibrix/pkg/utils"
+	"k8s.io/klog/v2"
 )
 
 // Sliding window configuration
@@ -141,6 +142,9 @@ func NewInMemorySlidingWindowTokenTracker(config *VTCConfig, opts ...TokenTracke
 		maxTrackedToken: 0.0,             // Start with zero as default max
 		config:          config,
 	}
+
+	// Initialize window size based on environment variables
+	tracker.updateWindowSize()
 
 	for _, opt := range opts {
 		opt(tracker)
@@ -266,16 +270,32 @@ func (t *InMemorySlidingWindowTokenTracker) GetMaxTokenCount(ctx context.Context
 
 // Time: Avg O(1) (amortized), Worst O(B_u) where B_u = buckets for user u | Space: O(1)
 func (t *InMemorySlidingWindowTokenTracker) UpdateTokenCount(ctx context.Context, user string, inputTokens, outputTokens float64) error {
+	klog.InfoS("VTC DEBUG: UpdateTokenCount called",
+		"user", user,
+		"inputTokens", inputTokens,
+		"outputTokens", outputTokens,
+		"contextValid", ctx != nil)
+
 	if user == "" {
+		klog.InfoS("VTC DEBUG: UpdateTokenCount rejected - empty user")
 		return fmt.Errorf("user ID cannot be empty")
 	}
 
+	klog.InfoS("VTC DEBUG: UpdateTokenCount acquiring lock", "user", user)
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	klog.InfoS("VTC DEBUG: UpdateTokenCount lock acquired", "user", user)
 
 	now := time.Now()
 	currentTimestamp := t.bucketUnit.toTimestamp(now)
 	cutoff := t.getCutoffTimestamp()
+
+	klog.InfoS("VTC DEBUG: UpdateTokenCount timestamps",
+		"user", user,
+		"currentTimestamp", currentTimestamp,
+		"cutoff", cutoff,
+		"windowSize", t.windowSize,
+		"bucketUnit", t.bucketUnit)
 
 	_, ok := t.userBucketStore[user]
 	if !ok {
@@ -313,6 +333,17 @@ func (t *InMemorySlidingWindowTokenTracker) UpdateTokenCount(ctx context.Context
 
 	// Update user total and global min/max efficiently
 	t.updateUserTotalAndMinMax(user, oldTotal, newTotal)
+
+	klog.InfoS("VTC DEBUG: UpdateTokenCount completed",
+		"user", user,
+		"oldTotal", oldTotal,
+		"newTotal", newTotal,
+		"newTokens", newTokens,
+		"inputWeight", t.config.InputTokenWeight,
+		"outputWeight", t.config.OutputTokenWeight,
+		"bucketCount", t.userBucketStore[user].buckets.Len(),
+		"globalMinToken", t.minTrackedToken,
+		"globalMaxToken", t.maxTrackedToken)
 
 	return nil
 }

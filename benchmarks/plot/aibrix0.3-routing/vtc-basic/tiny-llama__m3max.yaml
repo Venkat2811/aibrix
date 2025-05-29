@@ -86,6 +86,13 @@ spec:
           volumeMounts:
             - name: hf-cache
               mountPath: /root/.cache/huggingface
+          resources:
+            requests:
+              memory: "6Gi"
+              cpu: "2000m"
+            limits:
+              memory: "8Gi"
+              cpu: "3000m"
       volumes:
         - name: hf-cache
           hostPath:

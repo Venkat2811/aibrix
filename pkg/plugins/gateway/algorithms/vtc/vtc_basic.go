@@ -160,12 +160,24 @@ func (r *BasicVTCRouter) Route(ctx *types.RoutingContext, readyPodList types.Pod
 		// 2. Get pod load for utilization score
 		var podLoad float64
 		if r.cache != nil {
+			klog.InfoS("VTC DEBUG: About to lookup pod metrics",
+				"podName", pod.Name,
+				"podNamespace", pod.Namespace,
+				"modelName", ctx.Model,
+				"metricName", metrics.NumRequestsRunning)
+
 			reqCount, err := r.cache.GetMetricValueByPodModel(pod.Name, pod.Namespace, ctx.Model, metrics.NumRequestsRunning)
 			if err != nil {
 				klog.ErrorS(err, "failed to get pod metrics, using default value", "pod", pod.Name)
 				podLoad = 0
 			} else {
 				podLoad = reqCount.GetSimpleValue()
+				klog.InfoS("VTC DEBUG: Successfully retrieved pod metrics",
+					"podName", pod.Name,
+					"modelName", ctx.Model,
+					"metricName", metrics.NumRequestsRunning,
+					"podLoad", podLoad,
+					"rawMetricValue", reqCount)
 			}
 		} else {
 			klog.Info("Cache is nil, using default pod load value")
@@ -208,10 +220,21 @@ func (r *BasicVTCRouter) Route(ctx *types.RoutingContext, readyPodList types.Pod
 	}
 
 	if *user != "" {
+		klog.InfoS("VTC DEBUG: About to call UpdateTokenCount",
+			"user", *user,
+			"inputTokens", inputTokens,
+			"outputTokens", outputTokens,
+			"contextValid", ctx.Context != nil,
+			"trackerValid", r.tokenTracker != nil)
+
 		err := r.tokenTracker.UpdateTokenCount(ctx.Context, *user, inputTokens, outputTokens)
 		if err != nil {
-			klog.ErrorS(err, "failed to update user token count", "user", *user)
+			klog.ErrorS(err, "VTC DEBUG: UpdateTokenCount failed", "user", *user, "inputTokens", inputTokens, "outputTokens", outputTokens)
+		} else {
+			klog.InfoS("VTC DEBUG: UpdateTokenCount succeeded", "user", *user, "inputTokens", inputTokens, "outputTokens", outputTokens)
 		}
+	} else {
+		klog.InfoS("VTC DEBUG: Skipping UpdateTokenCount because user is empty")
 	}
 
 	ctx.SetTargetPod(targetPod)

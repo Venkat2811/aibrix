@@ -140,7 +140,7 @@ run: manifests generate fmt vet ## Run a controller from your host.
 
 # If you wish to build the manager image targeting other platforms you can use the --platform flag.
 # (i.e. docker build --platform linux/arm64). However, you must enable docker buildKit for it.
-# More info: https://docs.docker.com/develop/develop-images/build_enhancements/
+# More info: https://docs.docker.com/build/build_enhancements/
 
 # This is used to determine if the current branch is the main branch.
 IS_MAIN_BRANCH ?= true
@@ -257,7 +257,7 @@ dev-install-in-kind: docker-build-all install
 	@$(KUBECTL) apply -f observability/monitor/service_monitor_vllm.yaml || echo "Warning: Failed to apply vLLM ServiceMonitor"
 	@$(KUBECTL) apply -f observability/monitor/service_monitor_gateway.yaml || echo "Warning: Failed to apply Gateway ServiceMonitor"
 	@$(KUBECTL) apply -f observability/monitor/envoy_metrics_service.yaml || echo "Warning: Failed to apply Envoy metrics service"
-
+	
 	@echo "Applying test configurations..."
 	@$(KUBECTL) apply -k config/test || { echo "Warning: Failed to apply test configurations"; }
 	
@@ -269,6 +269,19 @@ dev-install-in-kind: docker-build-all install
 	cd ../..
 	
 	@echo "AIBrix installation in Kind complete!"
+
+.PHONY: dev-port-forward
+dev-port-forward:
+	@KUBECTL=$(KUBECTL) ./scripts/port-forward.sh
+
+.PHONY: dev-stop-port-forward
+dev-stop-port-forward:
+	@echo "Stopping all port forwarding sessions..."
+	@-kill $$(cat .envoy-pf.pid 2>/dev/null) 2>/dev/null && rm .envoy-pf.pid 2>/dev/null || true
+	@-kill $$(cat .redis-pf.pid 2>/dev/null) 2>/dev/null && rm .redis-pf.pid 2>/dev/null || true
+	@-kill $$(cat .prometheus-pf.pid 2>/dev/null) 2>/dev/null && rm .prometheus-pf.pid 2>/dev/null || true
+	@-kill $$(cat .grafana-pf.pid 2>/dev/null) 2>/dev/null && rm .grafana-pf.pid 2>/dev/null || true
+	@echo "All port forwarding sessions stopped"
 
 .PHONY: dev-uninstall-from-kind
 dev-uninstall-from-kind:
