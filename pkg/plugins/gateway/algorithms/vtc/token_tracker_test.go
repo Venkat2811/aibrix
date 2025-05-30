@@ -19,6 +19,7 @@ package vtc
 import (
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -654,4 +655,220 @@ func TestTokenTrackerWindowSizeThroughConstructor(t *testing.T) {
 	if windowSize == 0 {
 		t.Errorf("Window size should not be 0, got %v", windowSize)
 	}
+}
+
+func TestTokenTrackerMinMaxBugAfterExpiration(t *testing.T) {
+	config := DefaultVTCConfig()
+	tracker := NewInMemorySlidingWindowTokenTracker(&config, WithWindowSize(100), WithTimeUnit(Milliseconds))
+	ctx := context.Background()
+
+	// Initially, min/max should be defaults since no users have tokens
+	minVal, err := tracker.GetMinTokenCount(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, defaultTokenTrackerMinTokens, minVal, "initial min should be default")
+	maxVal, err := tracker.GetMaxTokenCount(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, defaultTokenTrackerMaxTokens, maxVal, "initial max should be default")
+
+	// Add tokens for multiple users with different amounts
+	err = tracker.UpdateTokenCount(ctx, "user1", 50, 0) // 50 tokens
+	assert.NoError(t, err)
+	err = tracker.UpdateTokenCount(ctx, "user2", 200, 0) // 200 tokens
+	assert.NoError(t, err)
+	err = tracker.UpdateTokenCount(ctx, "user3", 100, 0) // 100 tokens
+	assert.NoError(t, err)
+
+	// Verify min/max are tracking active users correctly
+	minVal, err = tracker.GetMinTokenCount(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(50), minVal, "min should be 50 (user1)")
+	maxVal, err = tracker.GetMaxTokenCount(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(200), maxVal, "max should be 200 (user2)")
+
+	// Verify all users have correct token counts
+	tokens1, err := tracker.GetTokenCount(ctx, "user1")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(50), tokens1, "user1 should have 50 tokens")
+	tokens2, err := tracker.GetTokenCount(ctx, "user2")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(200), tokens2, "user2 should have 200 tokens")
+	tokens3, err := tracker.GetTokenCount(ctx, "user3")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(100), tokens3, "user3 should have 100 tokens")
+
+	// Wait for ALL tokens to expire (beyond 100ms window)
+	time.Sleep(110 * time.Millisecond)
+
+	// After expiration, GetTokenCount should return 0 for all users (this works correctly)
+	tokens1, err = tracker.GetTokenCount(ctx, "user1")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(0), tokens1, "user1 tokens should be 0 after expiration")
+	tokens2, err = tracker.GetTokenCount(ctx, "user2")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(0), tokens2, "user2 tokens should be 0 after expiration")
+	tokens3, err = tracker.GetTokenCount(ctx, "user3")
+	assert.NoError(t, err)
+	assert.Equal(t, float64(0), tokens3, "user3 tokens should be 0 after expiration")
+
+	// 🐛 BUG EXPOSURE: After ALL users expire, min/max should return to defaults
+	// but they will still return stale values from before expiration
+	minVal, err = tracker.GetMinTokenCount(ctx)
+	assert.NoError(t, err)
+	// This assertion will FAIL, exposing the bug:
+	// Expected: defaultTokenTrackerMinTokens (1000.0)
+	// Actual: 50 (stale value from user1)
+	assert.Equal(t, defaultTokenTrackerMinTokens, minVal,
+		"BUG: min should return to default (1000) when all users expired, but returns stale value")
+
+	maxVal, err = tracker.GetMaxTokenCount(ctx)
+	assert.NoError(t, err)
+	// This assertion will FAIL, exposing the bug:
+	// Expected: defaultTokenTrackerMaxTokens (8000.0)
+	// Actual: 200 (stale value from user2)
+	assert.Equal(t, defaultTokenTrackerMaxTokens, maxVal,
+		"BUG: max should return to default (8000) when all users expired, but returns stale value")
+
+	// Additional verification: Add a new user after expiration
+	// This should reset the min/max to the new user's value
+	err = tracker.UpdateTokenCount(ctx, "user4", 75, 0) // 75 tokens
+	assert.NoError(t, err)
+
+	// Now min and max should both be 75 (only active user)
+	minVal, err = tracker.GetMinTokenCount(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(75), minVal, "min should be 75 after adding new user")
+	maxVal, err = tracker.GetMaxTokenCount(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, float64(75), maxVal, "max should be 75 after adding new user")
+}
+
+func TestTokenTrackerRealWorldScenario(t *testing.T) {
+	config := DefaultVTCConfig()
+	// Use seconds instead of milliseconds to better simulate real world
+	tracker := NewInMemorySlidingWindowTokenTracker(&config, WithWindowSize(5), WithTimeUnit(Seconds))
+	ctx := context.Background()
+
+	t.Logf("=== Initial State ===")
+	minVal, _ := tracker.GetMinTokenCount(ctx)
+	maxVal, _ := tracker.GetMaxTokenCount(ctx)
+	t.Logf("Initial: min=%f, max=%f", minVal, maxVal)
+
+	// Simulate a benchmark run with varying token counts like in real scenario
+	t.Logf("=== Simulating Benchmark Run ===")
+	err := tracker.UpdateTokenCount(ctx, "user-small-2", 41, 20) // 41 + 20*2 = 81 tokens (like real data)
+	assert.NoError(t, err)
+	err = tracker.UpdateTokenCount(ctx, "user-med-2", 202, 20) // 202 + 20*2 = 242 tokens
+	assert.NoError(t, err)
+	err = tracker.UpdateTokenCount(ctx, "user-high-1", 292, 20) // 292 + 20*2 = 332 tokens
+	assert.NoError(t, err)
+	err = tracker.UpdateTokenCount(ctx, "user-high-2", 346, 20) // 346 + 20*2 = 386 tokens
+	assert.NoError(t, err)
+
+	minVal, _ = tracker.GetMinTokenCount(ctx)
+	maxVal, _ = tracker.GetMaxTokenCount(ctx)
+	adaptiveBucketSize := math.Max(1000, (minVal+maxVal)/2)
+	t.Logf("After benchmark: min=%f, max=%f, adaptiveBucketSize=%f", minVal, maxVal, adaptiveBucketSize)
+
+	// Verify individual token counts
+	tokens := make(map[string]float64)
+	users := []string{"user-small-2", "user-med-2", "user-high-1", "user-high-2"}
+	for _, user := range users {
+		tokenCount, _ := tracker.GetTokenCount(ctx, user)
+		tokens[user] = tokenCount
+		t.Logf("User %s: %f tokens", user, tokenCount)
+	}
+
+	// Wait 6 seconds (beyond the 5-second window) - simulate 45 minutes later
+	t.Logf("=== Waiting 6 seconds (beyond 5s window) ===")
+	time.Sleep(6 * time.Second)
+
+	// Check token counts after expiration
+	t.Logf("=== After Token Expiration ===")
+	allExpired := true
+	for _, user := range users {
+		tokenCount, _ := tracker.GetTokenCount(ctx, user)
+		t.Logf("User %s: %f tokens (after expiration)", user, tokenCount)
+		if tokenCount != 0 {
+			allExpired = false
+		}
+	}
+	assert.True(t, allExpired, "All user tokens should be 0 after window expiration")
+
+	// Check min/max after expiration - this is the critical test
+	minVal, _ = tracker.GetMinTokenCount(ctx)
+	maxVal, _ = tracker.GetMaxTokenCount(ctx)
+	adaptiveBucketSize = math.Max(1000, (minVal+maxVal)/2)
+	t.Logf("After expiration: min=%f, max=%f, adaptiveBucketSize=%f", minVal, maxVal, adaptiveBucketSize)
+
+	// This is what causes the bug in real world:
+	// If min/max don't reset, bucket size stays high
+	if minVal != 1000.0 || maxVal != 8000.0 {
+		t.Errorf("BUG FOUND: min/max should reset to defaults when all users expire")
+		t.Errorf("Expected: min=1000, max=8000")
+		t.Errorf("Actual: min=%f, max=%f", minVal, maxVal)
+		t.Errorf("This causes adaptiveBucketSize=%f instead of expected ~4500", adaptiveBucketSize)
+	}
+
+	// Additional test: Simulate the exact VTC algorithm calculation
+	expectedBucketSizeIfFixed := math.Max(1000, (1000+8000)/2) // = 4500
+	t.Logf("Expected bucket size if fixed: %f", expectedBucketSizeIfFixed)
+	t.Logf("Actual bucket size with current logic: %f", adaptiveBucketSize)
+}
+
+func TestTokenTrackerLazyPruningBug(t *testing.T) {
+	config := DefaultVTCConfig()
+	tracker := NewInMemorySlidingWindowTokenTracker(&config, WithWindowSize(100), WithTimeUnit(Milliseconds))
+	ctx := context.Background()
+
+	t.Logf("=== Initial State ===")
+	minVal, _ := tracker.GetMinTokenCount(ctx)
+	maxVal, _ := tracker.GetMaxTokenCount(ctx)
+	t.Logf("Initial: min=%f, max=%f", minVal, maxVal)
+
+	// Add tokens for users
+	err := tracker.UpdateTokenCount(ctx, "user1", 50, 0) // 50 tokens
+	assert.NoError(t, err)
+	err = tracker.UpdateTokenCount(ctx, "user2", 200, 0) // 200 tokens
+	assert.NoError(t, err)
+
+	minVal, _ = tracker.GetMinTokenCount(ctx)
+	maxVal, _ = tracker.GetMaxTokenCount(ctx)
+	t.Logf("After adding users: min=%f, max=%f", minVal, maxVal)
+
+	// Wait for tokens to expire
+	time.Sleep(110 * time.Millisecond)
+
+	// 🐛 KEY DIFFERENCE: Don't call GetTokenCount() for any users
+	// In real world, if no users are making requests, GetTokenCount() is never called
+	// This means pruning never happens, so min/max tracking doesn't get updated
+
+	// Now call GetMinTokenCount and GetMaxTokenCount directly (like VTC algorithm does)
+	minVal, _ = tracker.GetMinTokenCount(ctx)
+	maxVal, _ = tracker.GetMaxTokenCount(ctx)
+	t.Logf("After expiration WITHOUT calling GetTokenCount: min=%f, max=%f", minVal, maxVal)
+
+	// 🐛 BUG EXPOSURE: These should be defaults (1000, 8000) but will be stale (50, 200)
+	// because no GetTokenCount() calls triggered pruning
+	if minVal == 50.0 && maxVal == 200.0 {
+		t.Errorf("BUG CONFIRMED: min/max are stale because pruning is lazy!")
+		t.Errorf("GetMinTokenCount/GetMaxTokenCount don't trigger pruning")
+		t.Errorf("They only use cached minTrackedToken/maxTrackedToken values")
+		t.Errorf("Pruning only happens in GetTokenCount() and UpdateTokenCount()")
+	}
+
+	// Now call GetTokenCount() for users to trigger pruning
+	t.Logf("=== Triggering pruning by calling GetTokenCount ===")
+	tokens1, _ := tracker.GetTokenCount(ctx, "user1")
+	tokens2, _ := tracker.GetTokenCount(ctx, "user2")
+	t.Logf("User1: %f, User2: %f (after pruning)", tokens1, tokens2)
+
+	// NOW check min/max again - they should be fixed
+	minVal, _ = tracker.GetMinTokenCount(ctx)
+	maxVal, _ = tracker.GetMaxTokenCount(ctx)
+	t.Logf("After pruning triggered: min=%f, max=%f", minVal, maxVal)
+
+	// Verify they're now correct
+	assert.Equal(t, defaultTokenTrackerMinTokens, minVal, "min should be default after pruning")
+	assert.Equal(t, defaultTokenTrackerMaxTokens, maxVal, "max should be default after pruning")
 }

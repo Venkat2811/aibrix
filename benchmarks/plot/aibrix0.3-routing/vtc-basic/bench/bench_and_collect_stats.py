@@ -5,11 +5,9 @@ import json
 import logging
 import os
 import random
-import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from queue import Queue
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -92,6 +90,91 @@ def setup_redis_users():
     except Exception as e:
         logger.error(f"Error creating users in Redis: {e}")
         return False
+
+
+def run_system_warmup():
+    """
+    Run system warm-up with short requests using random routing.
+    This helps initialize pods, establish connections, and populate caches.
+    """
+    logger.info("=" * 50)
+    logger.info("🔥 SYSTEM WARM-UP PHASE")
+    logger.info("=" * 50)
+    logger.info("Running warm-up requests to initialize system...")
+
+    warmup_requests = 10
+    warmup_users = []
+
+    # Collect all users from all categories
+    for category in USER_CATEGORIES:
+        warmup_users.extend(category["users"])
+
+    # Short prompts for warm-up
+    warmup_prompts = [
+        "Hello",
+        "Hi there",
+        "Test message",
+        "Quick check",
+        "System ready?",
+        "Warm up",
+        "Initialize",
+        "Hello world",
+        "Test 123",
+        "Ready to go",
+    ]
+
+    successful_warmup = 0
+    failed_warmup = 0
+
+    logger.info(f"Sending {warmup_requests} warm-up requests with random routing...")
+
+    for i in range(warmup_requests):
+        # Select random user and prompt
+        user = random.choice(warmup_users)
+        prompt = random.choice(warmup_prompts)
+
+        logger.info(f"Warm-up {i+1}/{warmup_requests} - User: {user}")
+
+        # Make warm-up request with random routing and short output
+        result = make_non_streaming_req(
+            user=user,
+            prompt=prompt,
+            routing_algorithm="random",  # Use random routing for warm-up
+            output_tokens=5,  # Very short responses
+        )
+
+        if result["success"]:
+            successful_warmup += 1
+            logger.info(
+                f"  ✅ Success - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
+            )
+        else:
+            failed_warmup += 1
+            logger.warning(
+                f"  ❌ Failed - Error: {result.get('error', 'Unknown')[:50]}"
+            )
+
+        # Small delay between warm-up requests
+        time.sleep(0.5)
+
+    warmup_success_rate = (successful_warmup / warmup_requests) * 100
+
+    logger.info("=" * 50)
+    logger.info("🔥 WARM-UP RESULTS:")
+    logger.info(f"  Total requests: {warmup_requests}")
+    logger.info(f"  Successful: {successful_warmup} ({warmup_success_rate:.1f}%)")
+    logger.info(f"  Failed: {failed_warmup}")
+
+    if warmup_success_rate >= 80:
+        logger.info("  ✅ System warm-up completed successfully!")
+    else:
+        logger.warning("  ⚠️  Warm-up had high failure rate - system may not be ready")
+
+    logger.info("=" * 50)
+    logger.info("Waiting 5 seconds for system to stabilize...")
+    time.sleep(5)
+
+    return warmup_success_rate >= 80
 
 
 def make_streaming_req():
@@ -809,6 +892,7 @@ def run_benchmark(
     target_qps: float = 0,
     algorithms: List[str] = None,
     strict_mode: bool = False,
+    skip_warmup: bool = False,
 ):
     """
     Run benchmark for specified traffic pattern and save results.
@@ -819,6 +903,7 @@ def run_benchmark(
         target_qps: Target queries per second (0 = no rate limit)
         algorithms: List of algorithms to test (default: both random and vtc-basic)
         strict_mode: If True, any failure invalidates comparison (default: 2% threshold)
+        skip_warmup: If True, skip the system warm-up phase
     """
     if algorithms is None:
         algorithms = DEFAULT_ROUTING_ALGORITHMS
@@ -835,6 +920,16 @@ def run_benchmark(
     if not setup_redis_users():
         logger.error("Failed to setup Redis users, aborting benchmark")
         return
+
+    # Run system warm-up (unless skipped)
+    if not skip_warmup:
+        logger.info("Running system warm-up...")
+        if not run_system_warmup():
+            logger.warning(
+                "System warm-up had issues, but continuing with benchmark..."
+            )
+    else:
+        logger.info("Skipping system warm-up (disabled)")
 
     # Load VTC dataset for real prompts
     logger.info("Loading VTC dataset for real prompts...")
@@ -906,123 +1001,20 @@ def run_benchmark(
 
         # Calculate request timing based on QPS
         if target_qps > 0:
-            # Generate requests at specified QPS
+            # Generate requests at specified QPS using threading for true async
             interval = 1.0 / target_qps
             logger.info(
                 f"Generating requests at {target_qps} QPS (interval: {interval:.3f}s)"
             )
 
-            # Use threading to maintain QPS rate
-            request_queue = Queue()
-            results_lock = threading.Lock()
+            import queue
+            import threading
 
-            def worker():
-                while True:
-                    item = request_queue.get()
-                    if item is None:
-                        break
-                    i, req_data, start_time = item
+            # Queue to store results
+            result_queue = queue.Queue()
 
-                    user = req_data["user"]
-
-                    # Generate prompt from dataset or synthetically
-                    if use_real_dataset:
-                        prompt = get_prompt_from_dataset(
-                            vtc_dataset, user, req_data["category"]
-                        )
-                        if prompt is None:
-                            # Fallback to synthetic if dataset doesn't have this category
-                            prompt = generate_variable_prompt(
-                                user,
-                                req_data["category"],
-                                req_data["min_tokens"],
-                                req_data["max_tokens"],
-                            )
-                    else:
-                        prompt = generate_variable_prompt(
-                            user,
-                            req_data["category"],
-                            req_data["min_tokens"],
-                            req_data["max_tokens"],
-                        )
-
-                    # Make request
-                    result = make_non_streaming_req(
-                        user, prompt, routing_algorithm, output_tokens=20
-                    )
-
-                    # Find user category and token range
-                    user_category = next(
-                        (cat for cat in USER_CATEGORIES if user in cat["users"]), None
-                    )
-                    category_name = (
-                        user_category["name"] if user_category else "unknown"
-                    )
-                    token_range = (
-                        {
-                            "min_tokens": (
-                                user_category["min_tokens"] if user_category else 0
-                            ),
-                            "max_tokens": (
-                                user_category["max_tokens"] if user_category else 0
-                            ),
-                            "token_scale": (
-                                user_category["token_scale"] if user_category else 1
-                            ),
-                        }
-                        if user_category
-                        else None
-                    )
-
-                    # Save result
-                    save_request_result(
-                        result_dir,
-                        i,
-                        user,
-                        routing_algorithm,
-                        traffic_pattern,
-                        result,
-                        category_name,
-                        token_range,
-                    )
-
-                    # Track for analysis
-                    result["user"] = user
-                    result["algorithm"] = routing_algorithm
-                    result["scheduled_time"] = start_time
-                    result["category"] = category_name
-                    result["token_range"] = token_range
-                    result["traffic_pattern"] = traffic_pattern
-
-                    with results_lock:
-                        algorithm_requests.append(result)
-                        all_requests.append(result.copy())
-
-                    # Log result
-                    if result["success"]:
-                        logger.info(
-                            f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
-                        )
-                    else:
-                        status_code = result.get("status_code", "Unknown")
-                        error_msg = result.get("error", "Unknown")
-                        logger.error(
-                            f"Request {i+1} failed - Status: {status_code}, Error: {error_msg[:100]}{'...' if len(error_msg) > 100 else ''}, Pod: {result['target_pod']}"
-                        )
-
-                    request_queue.task_done()
-
-            # Start worker threads
-            num_workers = min(10, max(1, int(target_qps)))  # Scale workers with QPS
-            threads = []
-            for _ in range(num_workers):
-                t = threading.Thread(target=worker)
-                t.start()
-                threads.append(t)
-
-            # Schedule requests
-            start_time = time.time()
-            for i, req_data in enumerate(requests_data):
+            def send_request_async(i, req_data, send_time):
+                """Send a single request asynchronously"""
                 user = req_data["user"]
 
                 # Generate prompt from dataset or synthetically
@@ -1094,8 +1086,11 @@ def run_benchmark(
                 result["category"] = category_name
                 result["token_range"] = token_range
                 result["traffic_pattern"] = traffic_pattern
-                algorithm_requests.append(result)
-                all_requests.append(result.copy())
+                result["send_time"] = send_time
+                result["request_id"] = i
+
+                # Put result in queue
+                result_queue.put((i, result))
 
                 # Log result
                 if result["success"]:
@@ -1109,8 +1104,45 @@ def run_benchmark(
                         f"Request {i+1} failed - Status: {status_code}, Error: {error_msg[:100]}{'...' if len(error_msg) > 100 else ''}, Pod: {result['target_pod']}"
                     )
 
-                # Small delay between requests
-                time.sleep(0.5)
+            # Schedule and send requests at precise intervals
+            start_time = time.time()
+            threads = []
+
+            for i, req_data in enumerate(requests_data):
+                # Calculate when this request should be sent
+                scheduled_time = start_time + (i * interval)
+                current_time = time.time()
+
+                # Wait until it's time to send this request
+                if current_time < scheduled_time:
+                    time.sleep(scheduled_time - current_time)
+
+                # Record actual send time
+                actual_send_time = time.time()
+
+                # Start thread to send request
+                thread = threading.Thread(
+                    target=send_request_async, args=(i, req_data, actual_send_time)
+                )
+                thread.start()
+                threads.append(thread)
+
+            # Wait for all requests to complete
+            logger.info("Waiting for all requests to complete...")
+            for thread in threads:
+                thread.join()
+
+            # Collect results from queue
+            results_by_id = {}
+            while not result_queue.empty():
+                request_id, result = result_queue.get()
+                results_by_id[request_id] = result
+
+            # Add results in order
+            for i in range(len(requests_data)):
+                if i in results_by_id:
+                    algorithm_requests.append(results_by_id[i])
+                    all_requests.append(results_by_id[i].copy())
 
         else:
             # Sequential execution (no QPS limit)
@@ -1200,9 +1232,6 @@ def run_benchmark(
                     logger.error(
                         f"Request {i+1} failed - Status: {status_code}, Error: {error_msg[:100]}{'...' if len(error_msg) > 100 else ''}, Pod: {result['target_pod']}"
                     )
-
-                # Small delay between requests
-                time.sleep(0.5)
 
         # Store requests for this algorithm
         results_by_algorithm[routing_algorithm] = algorithm_requests
@@ -1411,6 +1440,12 @@ def main():
         help="Strict mode: any request failure invalidates comparison (default: 2%% threshold)",
     )
 
+    parser.add_argument(
+        "--no-warmup",
+        action="store_true",
+        help="Skip system warm-up phase (10 short requests with random routing)",
+    )
+
     args = parser.parse_args()
 
     if args.stream:
@@ -1432,6 +1467,7 @@ def main():
     logger.info(
         f"Validation: {'Strict (0% failure tolerance)' if args.strict else 'Relaxed (2% failure tolerance)'}"
     )
+    logger.info(f"Warm-up: {'Disabled' if args.no_warmup else 'Enabled'}")
     logger.info("=" * 60)
 
     # Run benchmark
@@ -1441,6 +1477,7 @@ def main():
         target_qps=args.qps,
         algorithms=algorithms_to_test,
         strict_mode=args.strict,
+        skip_warmup=args.no_warmup,
     )
 
     if result_dir:
