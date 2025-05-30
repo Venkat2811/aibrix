@@ -34,6 +34,9 @@ GATEWAY_URL = "http://localhost:8888"
 PROMETHEUS_URL = "http://localhost:9090"
 DEFAULT_ROUTING_ALGORITHMS = ["random", "vtc-basic"]
 
+# Add this near the top with other constants
+VTC_DATASET_PATH = "temp_workspace/dataset/vtc_routing_dataset_varied.jsonl"
+
 
 def setup_redis_users():
     """Setup Redis with user data for VTC routing."""
@@ -612,7 +615,7 @@ def validate_success_rates(
         failed_details = []
         for req in requests:
             if not req.get("success", False):
-                error_msg = req.get("error", "Unknown error")
+                error_msg = req.get("error", "Unknown")
                 status_code = req.get("status_code", "Unknown")
 
                 # Summarize common errors
@@ -648,6 +651,158 @@ def validate_success_rates(
     return validation_results
 
 
+def generate_variable_prompt(
+    user: str, category: str, min_tokens: int, max_tokens: int
+) -> str:
+    """
+    Generate a prompt with variable length based on user category.
+
+    Args:
+        user: User name
+        category: User category (small, medium, high)
+        min_tokens: Minimum token count for this category
+        max_tokens: Maximum token count for this category
+
+    Returns:
+        A prompt string with appropriate token length
+    """
+    # Target token count within the range (aim for middle of range)
+    target_tokens = random.randint(
+        max(min_tokens, 10),  # Ensure minimum reasonable length
+        min(max_tokens, 500),  # Cap at reasonable maximum
+    )
+
+    # Base prompts for different categories
+    base_prompts = {
+        "small": [
+            f"Hello, I am {user}. Please tell me a short story.",
+            f"Hi {user} here. What's the weather like?",
+            f"I'm {user}. Can you explain what AI is?",
+            f"Hello, I'm {user}. What's your favorite color?",
+        ],
+        "medium": [
+            f"Hello, I am {user}. I'm working on a project about renewable energy and would like you to explain the differences between solar, wind, and hydroelectric power generation methods, including their advantages and disadvantages.",
+            f"Hi, I'm {user}. Can you help me understand machine learning algorithms and provide examples of supervised versus unsupervised learning techniques used in data science?",
+            f"I'm {user} and I need assistance with planning a comprehensive marketing strategy for a small business, including digital marketing, social media presence, and customer engagement tactics.",
+            f"Hello {user} here. Please explain the process of photosynthesis in plants, including the light-dependent and light-independent reactions, and how they contribute to the ecosystem.",
+        ],
+        "high": [
+            f"Hello, I am {user}. I'm conducting research on the economic implications of climate change policies and their impact on developing nations. Could you provide a comprehensive analysis that covers the following aspects: 1) The relationship between carbon pricing mechanisms and economic growth in emerging markets, 2) How international climate agreements like the Paris Accord affect trade relationships and economic competitiveness, 3) The role of green technology transfer in addressing climate adaptation challenges, 4) Policy recommendations for balancing environmental protection with economic development goals, and 5) Case studies of successful climate policy implementation in developing countries. Please include relevant data, economic models, and cite specific examples where possible.",
+            f"Hi, I'm {user}, a graduate student working on my thesis about the intersection of artificial intelligence and healthcare systems. I need a detailed explanation covering: the current applications of machine learning in medical diagnosis and treatment, ethical considerations around AI decision-making in healthcare, privacy and security challenges with patient data, regulatory frameworks governing AI in medicine, the potential for AI to reduce healthcare costs and improve access, integration challenges with existing hospital systems, and future trends in AI-powered personalized medicine. Please provide specific examples, research findings, and discuss both the opportunities and risks associated with each aspect.",
+            f"I'm {user} and I'm preparing a comprehensive business proposal for sustainable urban development. The proposal needs to address: innovative green building technologies and their cost-effectiveness, smart city infrastructure including IoT sensors and data analytics, sustainable transportation systems and their integration with existing urban planning, waste management solutions including circular economy principles, energy-efficient systems and renewable energy integration, water conservation and management strategies, community engagement and social impact considerations, financing models for sustainable development projects, regulatory compliance and zoning requirements, and long-term maintenance and scalability plans. Please provide detailed technical specifications, cost-benefit analyses, and real-world implementation examples for each component.",
+        ],
+    }
+
+    # Get base prompt for category
+    category_prompts = base_prompts.get(category, base_prompts["small"])
+    base_prompt = random.choice(category_prompts)
+
+    # Estimate current token count (rough approximation: ~4 characters per token)
+    current_tokens = len(base_prompt) // 4
+
+    # If we need more tokens, add padding
+    if current_tokens < target_tokens:
+        additional_tokens_needed = target_tokens - current_tokens
+
+        # Add content to reach target token count
+        padding_phrases = [
+            " Please provide detailed explanations with examples.",
+            " I would appreciate comprehensive coverage of this topic.",
+            " Include relevant background information and context.",
+            " Please elaborate on the key concepts and principles involved.",
+            " Provide practical applications and real-world scenarios.",
+            " Include any relevant statistics, data, or research findings.",
+            " Explain the historical context and development of this subject.",
+            " Discuss different perspectives and approaches to this topic.",
+            " Include potential challenges and solutions.",
+            " Provide step-by-step explanations where applicable.",
+            " Discuss the implications and potential future developments.",
+            " Include comparisons with alternative approaches or methods.",
+            " Explain the underlying mechanisms and processes involved.",
+            " Provide recommendations and best practices.",
+            " Discuss the broader context and interconnected factors.",
+        ]
+
+        # Add padding until we reach target token count
+        padding_used = []
+        while current_tokens < target_tokens and padding_phrases:
+            phrase = random.choice(padding_phrases)
+            if phrase not in padding_used:  # Avoid duplicates
+                base_prompt += phrase
+                padding_used.append(phrase)
+                current_tokens = len(base_prompt) // 4
+            else:
+                break
+
+        # If still need more tokens, add repetitive content
+        if current_tokens < target_tokens:
+            remaining = target_tokens - current_tokens
+            filler = " Please provide additional details and explanations." * (
+                remaining // 8 + 1
+            )
+            base_prompt += filler[: remaining * 4]  # Approximate character count
+
+    return base_prompt
+
+
+def load_vtc_dataset(dataset_path: str = VTC_DATASET_PATH) -> List[Dict]:
+    """
+    Load the VTC dataset from JSONL file.
+
+    Args:
+        dataset_path: Path to the VTC dataset JSONL file
+
+    Returns:
+        List of dataset entries with prompts and metadata
+    """
+    dataset = []
+
+    if not os.path.exists(dataset_path):
+        logger.warning(f"VTC dataset not found at {dataset_path}")
+        logger.warning("Run prepare_dataset.py first to create the dataset")
+        return dataset
+
+    with open(dataset_path, "r") as f:
+        for line in f:
+            entry = json.loads(line.strip())
+            dataset.append(entry)
+
+    logger.info(f"Loaded VTC dataset with {len(dataset)} entries from {dataset_path}")
+    return dataset
+
+
+def get_prompt_from_dataset(
+    vtc_dataset: List[Dict], user: str, category: str
+) -> Optional[str]:
+    """
+    Get a prompt from the VTC dataset for a specific user and category.
+
+    Args:
+        vtc_dataset: Loaded VTC dataset
+        user: User name to match
+        category: User category to match
+
+    Returns:
+        Prompt content string or None if not found
+    """
+    # Find entries that match the user category
+    matching_entries = []
+    for entry in vtc_dataset:
+        for request in entry.get("requests", []):
+            if request.get("user_category") == category:
+                matching_entries.append(request)
+
+    if not matching_entries:
+        logger.warning(f"No prompts found for category {category} in dataset")
+        return None
+
+    # Select a random prompt from matching entries
+    selected_request = random.choice(matching_entries)
+    prompt_content = selected_request.get("prompt", [{}])[0].get("content", "")
+
+    return prompt_content
+
+
 def run_benchmark(
     traffic_pattern: str = "balanced",
     max_requests: int = 5,
@@ -680,6 +835,19 @@ def run_benchmark(
     if not setup_redis_users():
         logger.error("Failed to setup Redis users, aborting benchmark")
         return
+
+    # Load VTC dataset for real prompts
+    logger.info("Loading VTC dataset for real prompts...")
+    vtc_dataset = load_vtc_dataset()
+    use_real_dataset = len(vtc_dataset) > 0
+
+    if use_real_dataset:
+        logger.info("✅ Using real ShareGPT prompts from VTC dataset")
+    else:
+        logger.warning(
+            "⚠️  VTC dataset not available, using synthetic prompt generation"
+        )
+        logger.warning("   For better results, run: python /tmp/create_vtc_dataset.py")
 
     # Generate requests
     requests_data = prepare_requests(max_requests, traffic_pattern)
@@ -756,7 +924,27 @@ def run_benchmark(
                     i, req_data, start_time = item
 
                     user = req_data["user"]
-                    prompt = f"Hello, I am {user}. Please tell me a short story."
+
+                    # Generate prompt from dataset or synthetically
+                    if use_real_dataset:
+                        prompt = get_prompt_from_dataset(
+                            vtc_dataset, user, req_data["category"]
+                        )
+                        if prompt is None:
+                            # Fallback to synthetic if dataset doesn't have this category
+                            prompt = generate_variable_prompt(
+                                user,
+                                req_data["category"],
+                                req_data["min_tokens"],
+                                req_data["max_tokens"],
+                            )
+                    else:
+                        prompt = generate_variable_prompt(
+                            user,
+                            req_data["category"],
+                            req_data["min_tokens"],
+                            req_data["max_tokens"],
+                        )
 
                     # Make request
                     result = make_non_streaming_req(
@@ -835,32 +1023,120 @@ def run_benchmark(
             # Schedule requests
             start_time = time.time()
             for i, req_data in enumerate(requests_data):
-                scheduled_time = start_time + (i * interval)
-                current_time = time.time()
+                user = req_data["user"]
 
-                # Wait until scheduled time
-                if scheduled_time > current_time:
-                    time.sleep(scheduled_time - current_time)
+                # Generate prompt from dataset or synthetically
+                if use_real_dataset:
+                    prompt = get_prompt_from_dataset(
+                        vtc_dataset, user, req_data["category"]
+                    )
+                    if prompt is None:
+                        # Fallback to synthetic if dataset doesn't have this category
+                        prompt = generate_variable_prompt(
+                            user,
+                            req_data["category"],
+                            req_data["min_tokens"],
+                            req_data["max_tokens"],
+                        )
+                else:
+                    prompt = generate_variable_prompt(
+                        user,
+                        req_data["category"],
+                        req_data["min_tokens"],
+                        req_data["max_tokens"],
+                    )
 
                 logger.info(
-                    f"Scheduling request {i+1}/{len(requests_data)} - User: {req_data['user']}, Algorithm: {routing_algorithm}"
+                    f"Sending request {i+1}/{len(requests_data)} - User: {user}, Algorithm: {routing_algorithm}"
                 )
-                request_queue.put((i, req_data, scheduled_time))
 
-            # Wait for all requests to complete
-            request_queue.join()
+                # Make request
+                result = make_non_streaming_req(
+                    user, prompt, routing_algorithm, output_tokens=20
+                )
 
-            # Stop workers
-            for _ in threads:
-                request_queue.put(None)
-            for t in threads:
-                t.join()
+                # Find user category and token range
+                user_category = next(
+                    (cat for cat in USER_CATEGORIES if user in cat["users"]), None
+                )
+                category_name = user_category["name"] if user_category else "unknown"
+                token_range = (
+                    {
+                        "min_tokens": (
+                            user_category["min_tokens"] if user_category else 0
+                        ),
+                        "max_tokens": (
+                            user_category["max_tokens"] if user_category else 0
+                        ),
+                        "token_scale": (
+                            user_category["token_scale"] if user_category else 1
+                        ),
+                    }
+                    if user_category
+                    else None
+                )
+
+                # Save result
+                save_request_result(
+                    result_dir,
+                    i,
+                    user,
+                    routing_algorithm,
+                    traffic_pattern,
+                    result,
+                    category_name,
+                    token_range,
+                )
+
+                # Track for analysis
+                result["user"] = user
+                result["algorithm"] = routing_algorithm
+                result["category"] = category_name
+                result["token_range"] = token_range
+                result["traffic_pattern"] = traffic_pattern
+                algorithm_requests.append(result)
+                all_requests.append(result.copy())
+
+                # Log result
+                if result["success"]:
+                    logger.info(
+                        f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
+                    )
+                else:
+                    status_code = result.get("status_code", "Unknown")
+                    error_msg = result.get("error", "Unknown")
+                    logger.error(
+                        f"Request {i+1} failed - Status: {status_code}, Error: {error_msg[:100]}{'...' if len(error_msg) > 100 else ''}, Pod: {result['target_pod']}"
+                    )
+
+                # Small delay between requests
+                time.sleep(0.5)
 
         else:
             # Sequential execution (no QPS limit)
             for i, req_data in enumerate(requests_data):
                 user = req_data["user"]
-                prompt = f"Hello, I am {user}. Please tell me a short story."  # Simple prompt
+
+                # Generate prompt from dataset or synthetically
+                if use_real_dataset:
+                    prompt = get_prompt_from_dataset(
+                        vtc_dataset, user, req_data["category"]
+                    )
+                    if prompt is None:
+                        # Fallback to synthetic if dataset doesn't have this category
+                        prompt = generate_variable_prompt(
+                            user,
+                            req_data["category"],
+                            req_data["min_tokens"],
+                            req_data["max_tokens"],
+                        )
+                else:
+                    prompt = generate_variable_prompt(
+                        user,
+                        req_data["category"],
+                        req_data["min_tokens"],
+                        req_data["max_tokens"],
+                    )
 
                 logger.info(
                     f"Sending request {i+1}/{len(requests_data)} - User: {user}, Algorithm: {routing_algorithm}"
