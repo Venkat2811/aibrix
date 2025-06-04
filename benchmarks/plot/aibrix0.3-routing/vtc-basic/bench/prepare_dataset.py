@@ -12,14 +12,6 @@ from typing import Dict, List, Optional
 
 import numpy as np
 import tiktoken
-
-TOKENIZER = tiktoken.get_encoding("cl100k_base")
-
-
-def count_tokens(text):
-    return len(TOKENIZER.encode(text, disallowed_special=()))
-
-
 from constants import (
     DATASET_DIR,
     DEFAULT_INTERVAL_MS,
@@ -32,7 +24,13 @@ from constants import (
     VTC_DATASET_PATH,
 )
 
-# CPU-only user categories for M3 Max systems
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+TOKENIZER = tiktoken.get_encoding("cl100k_base")
+
 CPU_ONLY_USER_CATEGORIES = [
     {
         "name": "sm-small",
@@ -40,7 +38,7 @@ CPU_ONLY_USER_CATEGORIES = [
         "token_scale": 0.5,
         "min_tokens": 5,
         "max_tokens": 35,
-        "target_percentage": 0.4,  # 40% of requests
+        "target_percentage": 0.4,
     },
     {
         "name": "sm-medium",
@@ -48,7 +46,7 @@ CPU_ONLY_USER_CATEGORIES = [
         "token_scale": 1.0,
         "min_tokens": 45,
         "max_tokens": 75,
-        "target_percentage": 0.35,  # 35% of requests
+        "target_percentage": 0.35,
     },
     {
         "name": "sm-high",
@@ -56,39 +54,36 @@ CPU_ONLY_USER_CATEGORIES = [
         "token_scale": 1.5,
         "min_tokens": 85,
         "max_tokens": 130,
-        "target_percentage": 0.25,  # 25% of requests
+        "target_percentage": 0.25,
     },
 ]
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-logger = logging.getLogger(__name__)
+
+def count_tokens(text):
+    return len(TOKENIZER.encode(text, disallowed_special=()))
 
 
 def download_if_not_exists_dataset(dataset_file: Optional[str] = None) -> str:
     if not dataset_file:
         dataset_dir = Path(DATASET_DIR)
         dataset_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Created temporary workspace at {TEMP_WORKSPACE}")
-
         dataset_path = dataset_dir / SHAREGPT_DATASET_FILENAME
+
         if dataset_path.exists():
-            print(f"Dataset already exists at {dataset_path}, skipping download")
+            logger.info(f"Dataset already exists at {dataset_path}")
         else:
             try:
-                print(f"Downloading ShareGPT dataset from {SHAREGPT_DATASET_URL}")
+                logger.info(f"Downloading ShareGPT dataset from {SHAREGPT_DATASET_URL}")
                 urllib.request.urlretrieve(SHAREGPT_DATASET_URL, dataset_path)
-                print(f"Dataset downloaded to {dataset_path}")
+                logger.info(f"Dataset downloaded to {dataset_path}")
             except Exception as e:
-                print(f"Failed to download dataset: {e}")
+                logger.error(f"Failed to download dataset: {e}")
                 sys.exit(1)
     else:
         dataset_path = Path(dataset_file)
         if not dataset_path.exists():
-            print(f"Error: Dataset file not found at {dataset_file}")
+            logger.error(f"Dataset file not found at {dataset_file}")
             sys.exit(1)
-        print(f"Using specified dataset file: {dataset_file}")
 
     return str(dataset_path)
 
@@ -136,13 +131,12 @@ def assign_user_categories(
     min_requests: int = DEFAULT_MIN_REQUESTS,
     use_cpu_categories: bool = False,
 ) -> List[Dict]:
-    # Use CPU-optimized categories if requested
     categories_to_use = (
         CPU_ONLY_USER_CATEGORIES if use_cpu_categories else USER_CATEGORIES
     )
-
     prompts_sorted = sorted(prompts, key=lambda x: x["prompt_tokens"])
     categorized_prompts = []
+
     required_per_category = {
         cat["name"]: int(cat["target_percentage"] * min_requests)
         for cat in categories_to_use
@@ -155,32 +149,29 @@ def assign_user_categories(
             if category["min_tokens"] <= p["prompt_tokens"] <= category["max_tokens"]
         ]
 
-        if len(matching_prompts) < required_per_category[category["name"]]:
-            logger.warning(
-                f"Not enough prompts for category {category['name']}. "
-                f"Found {len(matching_prompts)}, need {required_per_category[category['name']]}"
-            )
-
         num_to_select = min(
             len(matching_prompts), required_per_category[category["name"]]
         )
 
+        if len(matching_prompts) < required_per_category[category["name"]]:
+            logger.warning(
+                f"Category {category['name']}: found {len(matching_prompts)}, need {required_per_category[category['name']]}"
+            )
+
         if num_to_select > 0:
             selected = random.sample(matching_prompts, num_to_select)
-        else:
-            selected = []
+            for prompt in selected:
+                prompt_with_user = prompt.copy()
+                prompt_with_user.update(
+                    {
+                        "user": random.choice(category["users"]),
+                        "user_category": category["name"],
+                        "token_scale": category["token_scale"],
+                    }
+                )
+                categorized_prompts.append(prompt_with_user)
 
-        for prompt in selected:
-            prompt_with_user = prompt.copy()
-            prompt_with_user.update(
-                {
-                    "user": random.choice(category["users"]),
-                    "user_category": category["name"],
-                    "token_scale": category["token_scale"],
-                }
-            )
-            categorized_prompts.append(prompt_with_user)
-
+    # Fill remaining slots if needed
     if len(categorized_prompts) < min_requests:
         additional_needed = min_requests - len(categorized_prompts)
         logger.warning(
@@ -188,7 +179,7 @@ def assign_user_categories(
         )
 
         for _ in range(additional_needed):
-            if categorized_prompts:  # Only duplicate if we have prompts
+            if categorized_prompts:
                 original = random.choice(categorized_prompts)
                 duplicate = original.copy()
                 category_info = next(
@@ -203,9 +194,11 @@ def assign_user_categories(
 
     random.shuffle(categorized_prompts)
 
+    # Log distribution stats
     category_counts = {}
     user_counts = {}
     category_tokens = {}
+
     for p in categorized_prompts:
         category = p["user_category"]
         user = p["user"]
@@ -218,18 +211,16 @@ def assign_user_categories(
 
     logger.info(f"Dataset distribution: {category_counts}")
 
-    # Print user distribution stats for each category
     for category, users in user_counts.items():
         tokens = category_tokens[category]
         avg_tokens = sum(tokens) / len(tokens) if tokens else 0
         min_tokens = min(tokens) if tokens else 0
         max_tokens = max(tokens) if tokens else 0
-        print(f"\n{category.upper()} category user distribution:")
-        print(
-            f"  Token length stats - Min: {min_tokens}, Max: {max_tokens}, Avg: {avg_tokens:.1f}"
+        logger.info(
+            f"{category}: tokens({min_tokens}-{max_tokens}, avg:{avg_tokens:.1f})"
         )
         for user, count in users.items():
-            print(f"  {user}: {count} requests")
+            logger.info(f"  {user}: {count} requests")
 
     return categorized_prompts
 
@@ -273,13 +264,12 @@ def create_vtc_bench_dataset(
 ) -> str:
     if not sharegpt_path:
         sharegpt_path = download_if_not_exists_dataset()
+
     if not output_path:
         if use_cpu_categories:
-            # Use different filename for CPU-optimized dataset
-            cpu_dataset_path = str(VTC_DATASET_PATH).replace(
+            output_path = str(VTC_DATASET_PATH).replace(
                 ".jsonl", "_cpu_optimized.jsonl"
             )
-            output_path = cpu_dataset_path
         else:
             output_path = str(VTC_DATASET_PATH)
 
@@ -289,16 +279,13 @@ def create_vtc_bench_dataset(
     prompts_with_tokens = extract_prompts_with_tokens(sharegpt_data)
 
     token_counts = [p["prompt_tokens"] for p in prompts_with_tokens]
-    min_tokens = min(token_counts)
-    max_tokens = max(token_counts)
-    avg_tokens = np.mean(token_counts)
     logger.info(
-        f"Token length stats - Min: {min_tokens}, Max: {max_tokens}, Avg: {avg_tokens:.1f}, "
-        f"Median: {np.median(token_counts):.1f}"
+        f"Token stats - Min: {min(token_counts)}, Max: {max(token_counts)}, "
+        f"Avg: {np.mean(token_counts):.1f}, Median: {np.median(token_counts):.1f}"
     )
 
     if use_cpu_categories:
-        logger.info("🖥️  Using CPU-optimized categories (M3 Max friendly):")
+        logger.info("Using CPU-optimized categories")
         for cat in CPU_ONLY_USER_CATEGORIES:
             logger.info(
                 f"  {cat['name']}: {cat['min_tokens']}-{cat['max_tokens']} tokens ({cat['target_percentage']*100:.0f}%)"
@@ -318,64 +305,41 @@ def create_vtc_bench_dataset(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Prepare VTC benchmark dataset from ShareGPT data",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="Prepare VTC benchmark dataset from ShareGPT data"
     )
-
     parser.add_argument(
-        "--sharegpt-path",
-        type=str,
-        help="Path to ShareGPT dataset file (will download if not provided)",
+        "--sharegpt-path", type=str, help="Path to ShareGPT dataset file"
     )
-
-    parser.add_argument(
-        "--output-path",
-        type=str,
-        help="Output path for VTC dataset (default: auto-generated based on mode)",
-    )
-
+    parser.add_argument("--output-path", type=str, help="Output path for VTC dataset")
     parser.add_argument(
         "--min-requests",
         type=int,
         default=DEFAULT_MIN_REQUESTS,
         help="Minimum number of requests to generate",
     )
-
     parser.add_argument(
         "--interval-ms",
         type=int,
         default=DEFAULT_INTERVAL_MS,
         help="Interval between requests in milliseconds",
     )
-
     parser.add_argument(
         "--cpu-only-users",
         action="store_true",
-        help="Use CPU-optimized user categories for M3 Max systems (5-25, 26-50, 51-80 tokens)",
+        help="Use CPU-optimized user categories (5-35, 45-75, 85-130 tokens)",
     )
 
     args = parser.parse_args()
 
     if args.cpu_only_users:
-        print("=== CPU-Optimized Dataset Generation (M3 Max Friendly) ===")
-        print("Token ranges:")
-        print("  SMALL:  5-25 tokens (40%)")
-        print("  MEDIUM: 26-50 tokens (35%)")
-        print("  HIGH:   51-80 tokens (25%)")
-        print("Users: sm-user-small-*, sm-user-med-*, sm-user-high-*")
+        logger.info("CPU-optimized dataset generation")
+        logger.info("Token ranges: SMALL(5-35), MEDIUM(45-75), HIGH(85-130)")
     else:
-        print("=== Standard Dataset Generation ===")
+        logger.info("Standard dataset generation")
 
-    if not args.sharegpt_path:
-        print("\n=== Downloading ShareGPT Dataset ===")
-        dataset_path = download_if_not_exists_dataset()
-    else:
-        dataset_path = args.sharegpt_path
-        print(f"Using provided ShareGPT dataset: {dataset_path}")
+    dataset_path = args.sharegpt_path or download_if_not_exists_dataset()
+    logger.info(f"Using dataset: {dataset_path}")
 
-    print(f"Dataset ready at: {dataset_path}")
-
-    print("\n=== Creating VTC Benchmark Dataset ===")
     vtc_dataset_path = create_vtc_bench_dataset(
         sharegpt_path=dataset_path,
         output_path=args.output_path,
@@ -384,11 +348,9 @@ def main():
         use_cpu_categories=args.cpu_only_users,
     )
 
+    logger.info(f"VTC benchmark dataset created: {vtc_dataset_path}")
     if args.cpu_only_users:
-        print(f"🖥️  CPU-optimized VTC benchmark dataset created at: {vtc_dataset_path}")
-        print("This dataset is optimized for M3 Max CPU-only processing!")
-    else:
-        print(f"VTC benchmark dataset created at: {vtc_dataset_path}")
+        logger.info("Dataset optimized for CPU-only processing")
 
 
 if __name__ == "__main__":

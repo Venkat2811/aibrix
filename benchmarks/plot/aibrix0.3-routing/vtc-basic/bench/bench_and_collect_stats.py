@@ -4,7 +4,9 @@ import argparse
 import json
 import logging
 import os
+import queue
 import random
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -21,18 +23,14 @@ from analyze_vtc_config import (
 )
 from constants import TRAFFIC_PATTERNS, USER_CATEGORIES
 
-# Setup logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# Benchmark configuration
 GATEWAY_URL = "http://localhost:8888"
 PROMETHEUS_URL = "http://localhost:9090"
 DEFAULT_ROUTING_ALGORITHMS = ["random", "vtc-basic"]
-
-# Add this near the top with other constants
 VTC_DATASET_PATH = (
     "temp_workspace/dataset/vtc_routing_dataset_varied_cpu_optimized.jsonl"
 )
@@ -54,7 +52,6 @@ def setup_redis_users():
             decode_responses=True,
         )
 
-        # Test connection
         if not redis_client.ping():
             logger.error("Redis connection test failed")
             return False
@@ -74,8 +71,8 @@ def setup_redis_users():
                 user_data = json.dumps(
                     {
                         "name": user_name,
-                        "rpm": 1000000,  # Very high RPM to avoid rate limiting
-                        "tpm": 10000000,  # Very high TPM to avoid rate limiting
+                        "rpm": 1000000,
+                        "tpm": 10000000,
                         "category": category["name"],
                     }
                 )
@@ -95,111 +92,61 @@ def setup_redis_users():
 
 
 def run_system_warmup():
-    """
-    Run system warm-up with short requests using VTC routing.
-    This helps initialize pods, establish connections, populate caches, and build VTC token history.
-    """
-    logger.info("=" * 50)
-    logger.info("🔥 SYSTEM WARM-UP PHASE")
-    logger.info("=" * 50)
-    logger.info("Running warm-up requests to initialize system...")
+    """Run system warm-up with short requests using VTC routing."""
+    logger.info("Running system warm-up")
 
     warmup_requests = 10
-    warmup_users = []
-
-    # Collect all users from all categories
-    for category in USER_CATEGORIES:
-        warmup_users.extend(category["users"])
-
-    # Short prompts for warm-up
+    warmup_users = [user for category in USER_CATEGORIES for user in category["users"]]
     warmup_prompts = [
         "Hello",
         "Hi there",
         "Test message",
         "Quick check",
         "System ready?",
-        "Warm up",
-        "Initialize",
-        "Hello world",
-        "Test 123",
-        "Ready to go",
     ]
 
     successful_warmup = 0
-    failed_warmup = 0
-
-    logger.info(f"Sending {warmup_requests} warm-up requests with VTC routing...")
 
     for i in range(warmup_requests):
-        # Select random user and prompt
         user = random.choice(warmup_users)
         prompt = random.choice(warmup_prompts)
 
         logger.info(f"Warm-up {i+1}/{warmup_requests} - User: {user}")
 
-        # Make warm-up request with VTC routing to build token history
         result = make_non_streaming_req(
-            user=user,
-            prompt=prompt,
-            routing_algorithm="vtc-basic",  # Use VTC routing for warm-up to build token history
-            output_tokens=5,  # Very short responses
+            user=user, prompt=prompt, routing_algorithm="vtc-basic", output_tokens=5
         )
 
         if result["success"]:
             successful_warmup += 1
             logger.info(
-                f"  ✅ Success - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
+                f"  Success - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
             )
         else:
-            failed_warmup += 1
-            logger.warning(
-                f"  ❌ Failed - Error: {result.get('error', 'Unknown')[:50]}"
-            )
+            logger.warning(f"  Failed - Error: {result.get('error', 'Unknown')[:50]}")
 
-        # Small delay between warm-up requests
         time.sleep(0.5)
 
     warmup_success_rate = (successful_warmup / warmup_requests) * 100
 
-    logger.info("=" * 50)
-    logger.info("🔥 WARM-UP RESULTS:")
-    logger.info(f"  Total requests: {warmup_requests}")
-    logger.info(f"  Successful: {successful_warmup} ({warmup_success_rate:.1f}%)")
-    logger.info(f"  Failed: {failed_warmup}")
+    logger.info(
+        f"Warm-up complete: {successful_warmup}/{warmup_requests} successful ({warmup_success_rate:.1f}%)"
+    )
 
     if warmup_success_rate >= 80:
-        logger.info("  ✅ System warm-up completed successfully!")
-        logger.info("  🎯 VTC token history initialized for users!")
+        logger.info("System warm-up completed successfully")
     else:
-        logger.warning("  ⚠️  Warm-up had high failure rate - system may not be ready")
+        logger.warning("Warm-up had high failure rate - system may not be ready")
 
-    logger.info("=" * 50)
-    logger.info("Waiting 5 seconds for system to stabilize...")
+    logger.info("Waiting 5 seconds for system to stabilize")
     time.sleep(5)
-
     return warmup_success_rate >= 80
-
-
-def make_streaming_req():
-    """Make a streaming request to the VTC system."""
-    pass
 
 
 def make_non_streaming_req(
     user: str, prompt: str, routing_algorithm: str, output_tokens: int = 20
 ) -> Dict:
-    """
-    Make a non-streaming request to the VTC system.
-
-    Args:
-        user: User name for the request
-        prompt: The prompt to send
-        routing_algorithm: Routing algorithm to use
-        output_tokens: Number of output tokens to request
-
-    Returns:
-        Dict with request results and metrics
-    """
+    """Make a non-streaming request to the VTC system."""
     headers = {
         "Content-Type": "application/json",
         "user": user,
@@ -223,11 +170,8 @@ def make_non_streaming_req(
             json=payload,
             timeout=120,
         )
-
         end_time = time.time()
         latency = end_time - start_time
-
-        # Extract pod information from response headers
         target_pod = response.headers.get("target-pod", "unknown")
 
         if response.status_code == 200:
@@ -238,7 +182,7 @@ def make_non_streaming_req(
                 "status_code": response.status_code,
                 "target_pod": target_pod,
                 "response_data": response_data,
-                "prompt_tokens": len(prompt.split()),  # Simple approximation
+                "prompt_tokens": len(prompt.split()),
                 "completion_tokens": response_data.get("usage", {}).get(
                     "completion_tokens", 0
                 ),
@@ -271,16 +215,7 @@ def make_non_streaming_req(
 
 
 def query_prometheus(query: str, timestamp: Optional[float] = None) -> Dict:
-    """
-    Query Prometheus for metrics.
-
-    Args:
-        query: PromQL query string
-        timestamp: Optional timestamp for historical data (default: current time)
-
-    Returns:
-        Dict with query results
-    """
+    """Query Prometheus for metrics."""
     try:
         params = {"query": query}
         if timestamp:
@@ -293,9 +228,7 @@ def query_prometheus(query: str, timestamp: Optional[float] = None) -> Dict:
         if response.status_code == 200:
             return response.json()
         else:
-            logger.warning(
-                f"Prometheus query failed: {response.status_code} - {response.text}"
-            )
+            logger.warning(f"Prometheus query failed: {response.status_code}")
             return {"status": "error", "data": {}}
 
     except Exception as e:
@@ -304,74 +237,45 @@ def query_prometheus(query: str, timestamp: Optional[float] = None) -> Dict:
 
 
 def collect_prometheus_metrics(timestamp: Optional[float] = None) -> Dict:
-    """
-    Collect system metrics from Prometheus.
-
-    Args:
-        timestamp: Optional timestamp for historical data
-
-    Returns:
-        Dict containing various system metrics
-    """
+    """Collect system metrics from Prometheus."""
     metrics = {}
 
-    # Pod-level metrics
     pod_queries = {
         "pod_cpu_usage": 'rate(container_cpu_usage_seconds_total{pod=~"tinyllama.*"}[1m])',
         "pod_memory_usage": 'container_memory_working_set_bytes{pod=~"tinyllama.*"}',
         "pod_request_count": "increase(vllm:request_success_total[1m])",
         "pod_request_latency_sum": "vllm:e2e_request_latency_seconds_sum",
         "pod_request_latency_count": "vllm:e2e_request_latency_seconds_count",
-        "pod_prompt_tokens_rate": "rate(vllm:prompt_tokens_total[1m])",
-        "pod_generation_tokens_rate": "rate(vllm:generation_tokens_total[1m])",
         "pod_requests_running": "vllm:num_requests_running",
         "pod_requests_waiting": "vllm:num_requests_waiting",
-        "pod_ttft_latency_sum": "vllm:time_to_first_token_seconds_sum",
-        "pod_ttft_latency_count": "vllm:time_to_first_token_seconds_count",
-        "pod_time_per_token_sum": "vllm:time_per_output_token_seconds_sum",
-        "pod_time_per_token_count": "vllm:time_per_output_token_seconds_count",
     }
 
-    # Gateway metrics
     gateway_queries = {
         "gateway_requests_total": "increase(envoy_http_downstream_rq_total[1m])",
         "gateway_response_time_sum": "envoy_http_downstream_rq_time_sum",
         "gateway_response_time_count": "envoy_http_downstream_rq_time_count",
-        "gateway_upstream_requests": "increase(envoy_cluster_upstream_rq_total[1m])",
-        "gateway_downstream_connections": "envoy_http_downstream_cx_active",
-        "gateway_upstream_response_time": "envoy_cluster_upstream_rq_time_sum",
     }
 
-    # VTC-specific routing metrics
     vtc_queries = {
         "vtc_bucket_size_active": "vtc_bucket_size_active",
         "vtc_bucket_size_changes": "abs(deriv(vtc_bucket_size_active[1m]))",
     }
 
-    # Collect pod metrics
-    metrics["pods"] = {}
-    for metric_name, query in pod_queries.items():
-        result = query_prometheus(query, timestamp)
-        if result.get("status") == "success":
-            metrics["pods"][metric_name] = result.get("data", {}).get("result", [])
+    # Collect metrics
+    for category, queries in [
+        ("pods", pod_queries),
+        ("gateway", gateway_queries),
+        ("vtc", vtc_queries),
+    ]:
+        metrics[category] = {}
+        for metric_name, query in queries.items():
+            result = query_prometheus(query, timestamp)
+            if result.get("status") == "success":
+                metrics[category][metric_name] = result.get("data", {}).get(
+                    "result", []
+                )
 
-    # Collect gateway metrics
-    metrics["gateway"] = {}
-    for metric_name, query in gateway_queries.items():
-        result = query_prometheus(query, timestamp)
-        if result.get("status") == "success":
-            metrics["gateway"][metric_name] = result.get("data", {}).get("result", [])
-
-    # Collect VTC routing metrics
-    metrics["vtc"] = {}
-    for metric_name, query in vtc_queries.items():
-        result = query_prometheus(query, timestamp)
-        if result.get("status") == "success":
-            metrics["vtc"][metric_name] = result.get("data", {}).get("result", [])
-
-    # Add timestamp
     metrics["timestamp"] = timestamp or time.time()
-
     return metrics
 
 
@@ -384,23 +288,13 @@ def save_system_metrics(result_dir: str, metrics_type: str, metrics: Dict):
 
 
 def prepare_requests(max_req_count, user_distribution):
-    """
-    Prepare requests based on traffic pattern and user distribution.
-
-    Args:
-        max_req_count: Maximum number of requests to prepare
-        user_distribution: Traffic pattern name ('balanced', 'high_usage', 'bursty')
-
-    Returns:
-        List of prepared requests
-    """
+    """Prepare requests based on traffic pattern and user distribution."""
     if user_distribution not in TRAFFIC_PATTERNS:
         raise ValueError(f"Unknown user distribution: {user_distribution}")
 
     pattern = TRAFFIC_PATTERNS[user_distribution]
     requests = []
 
-    # Generate requests based on traffic pattern
     for i in range(max_req_count):
         # Select category based on probabilities
         rand = random.random()
@@ -413,15 +307,11 @@ def prepare_requests(max_req_count, user_distribution):
                 selected_category = category_config["category"]
                 break
 
-        # Find matching user category from USER_CATEGORIES
         user_category_info = next(
             cat for cat in USER_CATEGORIES if cat["name"] == selected_category
         )
-
-        # Select a random user from this category
         user = random.choice(user_category_info["users"])
 
-        # Create request
         request = {
             "request_id": i,
             "user": user,
@@ -434,49 +324,6 @@ def prepare_requests(max_req_count, user_distribution):
         requests.append(request)
 
     return requests
-
-
-def print_traffic_stats(requests, user_distribution):
-    """Print statistics for the generated traffic pattern."""
-    print(f"\n=== Traffic Pattern Stats: {user_distribution.upper()} ===")
-    print(f"Total requests: {len(requests)}")
-
-    # Category distribution
-    category_counts = {}
-    user_counts = {}
-    burstiness_stats = {}
-
-    for req in requests:
-        category = req["category"]
-        user = req["user"]
-        burstiness = req["burstiness"]
-
-        category_counts[category] = category_counts.get(category, 0) + 1
-        user_counts[user] = user_counts.get(user, 0) + 1
-
-        if category not in burstiness_stats:
-            burstiness_stats[category] = []
-        burstiness_stats[category].append(burstiness)
-
-    # Print category distribution
-    print("\nCategory distribution:")
-    for category, count in category_counts.items():
-        percentage = (count / len(requests)) * 100
-        avg_burstiness = sum(burstiness_stats[category]) / len(
-            burstiness_stats[category]
-        )
-        print(
-            f"  {category}: {count} requests ({percentage:.1f}%) - Avg burstiness: {avg_burstiness:.1f}"
-        )
-
-    # Print user distribution
-    print("\nUser distribution:")
-    for user, count in sorted(user_counts.items()):
-        percentage = (count / len(requests)) * 100
-        print(f"  {user}: {count} requests ({percentage:.1f}%)")
-
-    print(f"\nTotal unique users: {len(user_counts)}")
-    print("=" * 50)
 
 
 def create_result_dir() -> str:
@@ -518,7 +365,7 @@ def save_request_result(
 def save_comprehensive_stats(
     result_dir: str, all_requests: List[Dict], system_metrics: Dict
 ):
-    """Save comprehensive benchmark statistics in JSON format similar to advanced benchmark."""
+    """Save comprehensive benchmark statistics."""
     stats_data = {
         "benchmark_metadata": {
             "timestamp": datetime.now().isoformat(),
@@ -549,22 +396,16 @@ def save_comprehensive_stats(
         if not algo_requests:
             continue
 
-        # Basic stats
         successful_requests = [
             req for req in algo_requests if req.get("success", False)
         ]
-        failed_requests = [
-            req for req in algo_requests if not req.get("success", False)
-        ]
+        latencies = [req.get("latency", 0) for req in successful_requests]
 
         # Pod distribution
         pod_counts = {}
         for req in successful_requests:
             pod = req.get("target_pod", "unknown")
             pod_counts[pod] = pod_counts.get(pod, 0) + 1
-
-        # Latency analysis
-        latencies = [req.get("latency", 0) for req in successful_requests]
 
         # Category analysis
         category_stats = {}
@@ -592,7 +433,7 @@ def save_comprehensive_stats(
         stats_data["algorithm_summary"][algorithm] = {
             "total_requests": len(algo_requests),
             "successful_requests": len(successful_requests),
-            "failed_requests": len(failed_requests),
+            "failed_requests": len(algo_requests) - len(successful_requests),
             "success_rate": (
                 len(successful_requests) / len(algo_requests) * 100
                 if algo_requests
@@ -630,7 +471,7 @@ def save_comprehensive_stats(
             )
         stats_data["token_analysis"][algorithm] = token_data
 
-        # Routing effectiveness (clustering analysis)
+        # Routing effectiveness
         pod_user_mapping = {}
         for req in successful_requests:
             user = req.get("user", "unknown")
@@ -639,7 +480,6 @@ def save_comprehensive_stats(
                 pod_user_mapping[user] = []
             pod_user_mapping[user].append(pod)
 
-        # Calculate clustering effectiveness
         clustering_stats = {}
         for user, pods in pod_user_mapping.items():
             unique_pods = set(pods)
@@ -662,9 +502,7 @@ def save_comprehensive_stats(
     # Save to file
     stats_file = f"{result_dir}/comprehensive_benchmark_stats.json"
     with open(stats_file, "w") as f:
-        json.dump(
-            stats_data, f, indent=2, default=str
-        )  # default=str to handle numpy types
+        json.dump(stats_data, f, indent=2, default=str)
 
     logger.info(f"Comprehensive stats saved to: {stats_file}")
     return stats_file
@@ -673,16 +511,7 @@ def save_comprehensive_stats(
 def validate_success_rates(
     results_by_algorithm: Dict[str, List[Dict]], strict_mode: bool = False
 ) -> Dict:
-    """
-    Validate success rates for each algorithm.
-
-    Args:
-        results_by_algorithm: Dictionary mapping algorithm names to list of results
-        strict_mode: If True, any failure invalidates comparison (default: 2% threshold)
-
-    Returns:
-        Dictionary with success rate statistics for each algorithm
-    """
+    """Validate success rates for each algorithm."""
     validation_results = {}
 
     for algorithm, requests in results_by_algorithm.items():
@@ -704,7 +533,6 @@ def validate_success_rates(
                 error_msg = req.get("error", "Unknown")
                 status_code = req.get("status_code", "Unknown")
 
-                # Summarize common errors
                 if "Connection refused" in error_msg:
                     error_summary = f"Connection refused (status: {status_code})"
                 elif "timeout" in error_msg.lower():
@@ -740,25 +568,9 @@ def validate_success_rates(
 def generate_variable_prompt(
     user: str, category: str, min_tokens: int, max_tokens: int
 ) -> str:
-    """
-    Generate a prompt with variable length based on user category.
+    """Generate a prompt with variable length based on user category."""
+    target_tokens = random.randint(max(min_tokens, 10), min(max_tokens, 500))
 
-    Args:
-        user: User name
-        category: User category (small, medium, high)
-        min_tokens: Minimum token count for this category
-        max_tokens: Maximum token count for this category
-
-    Returns:
-        A prompt string with appropriate token length
-    """
-    # Target token count within the range (aim for middle of range)
-    target_tokens = random.randint(
-        max(min_tokens, 10),  # Ensure minimum reasonable length
-        min(max_tokens, 500),  # Cap at reasonable maximum
-    )
-
-    # Base prompts for different categories
     base_prompts = {
         "small": [
             f"Hello, I am {user}. Please tell me a short story.",
@@ -766,107 +578,55 @@ def generate_variable_prompt(
             f"I'm {user}. Can you explain what AI is?",
             f"Hello, I'm {user}. What's your favorite color?",
         ],
-        "sm-small": [  # CPU-optimized small category (5-25 tokens)
+        "sm-small": [
             f"Hello, I am {user}. Tell me a short story.",
             f"Hi {user}. What's the weather?",
             f"I'm {user}. Explain AI basics.",
             f"Hello, {user} here. Favorite color?",
-            f"Hi {user}. How are you?",
-            f"I'm {user}. Fun fact please.",
         ],
         "medium": [
-            f"Hello, I am {user}. I'm working on a project about renewable energy and would like you to explain the differences between solar, wind, and hydroelectric power generation methods, including their advantages and disadvantages.",
-            f"Hi, I'm {user}. Can you help me understand machine learning algorithms and provide examples of supervised versus unsupervised learning techniques used in data science?",
-            f"I'm {user} and I need assistance with planning a comprehensive marketing strategy for a small business, including digital marketing, social media presence, and customer engagement tactics.",
-            f"Hello {user} here. Please explain the process of photosynthesis in plants, including the light-dependent and light-independent reactions, and how they contribute to the ecosystem.",
+            f"Hello, I am {user}. I'm working on a project about renewable energy and would like you to explain the differences between solar, wind, and hydroelectric power generation methods.",
+            f"Hi, I'm {user}. Can you help me understand machine learning algorithms and provide examples of supervised versus unsupervised learning techniques?",
         ],
-        "sm-medium": [  # CPU-optimized medium category (26-50 tokens)
+        "sm-medium": [
             f"Hello, I am {user}. Can you explain how machine learning works in simple terms?",
             f"Hi {user}. I'm planning a garden and need advice on vegetables that grow well together.",
-            f"I'm {user}. Help me understand cryptocurrency basics for beginners.",
-            f"Hello, {user} here. Describe differences between solar and wind energy for homes.",
-            f"Hi {user}. I need a simple pasta recipe with vegetables that's nutritious.",
         ],
         "high": [
-            f"Hello, I am {user}. I'm conducting research on the economic implications of climate change policies and their impact on developing nations. Could you provide a comprehensive analysis that covers the following aspects: 1) The relationship between carbon pricing mechanisms and economic growth in emerging markets, 2) How international climate agreements like the Paris Accord affect trade relationships and economic competitiveness, 3) The role of green technology transfer in addressing climate adaptation challenges, 4) Policy recommendations for balancing environmental protection with economic development goals, and 5) Case studies of successful climate policy implementation in developing countries. Please include relevant data, economic models, and cite specific examples where possible.",
-            f"Hi, I'm {user}, a graduate student working on my thesis about the intersection of artificial intelligence and healthcare systems. I need a detailed explanation covering: the current applications of machine learning in medical diagnosis and treatment, ethical considerations around AI decision-making in healthcare, privacy and security challenges with patient data, regulatory frameworks governing AI in medicine, the potential for AI to reduce healthcare costs and improve access, integration challenges with existing hospital systems, and future trends in AI-powered personalized medicine. Please provide specific examples, research findings, and discuss both the opportunities and risks associated with each aspect.",
-            f"I'm {user} and I'm preparing a comprehensive business proposal for sustainable urban development. The proposal needs to address: innovative green building technologies and their cost-effectiveness, smart city infrastructure including IoT sensors and data analytics, sustainable transportation systems and their integration with existing urban planning, waste management solutions including circular economy principles, energy-efficient systems and renewable energy integration, water conservation and management strategies, community engagement and social impact considerations, financing models for sustainable development projects, regulatory compliance and zoning requirements, and long-term maintenance and scalability plans. Please provide detailed technical specifications, cost-benefit analyses, and real-world implementation examples for each component.",
+            f"Hello, I am {user}. I'm conducting research on the economic implications of climate change policies and their impact on developing nations. Could you provide a comprehensive analysis covering carbon pricing mechanisms, international climate agreements, green technology transfer, and policy recommendations.",
         ],
-        "sm-high": [  # CPU-optimized high category (51-80 tokens)
+        "sm-high": [
             f"Hello, I am {user}. I'm developing a mobile app for personal finance and need guidance on features, UX design, security, and banking API integration.",
-            f"Hi {user}. I'm researching sustainable business practices for a company. Explain environmental impact reduction, green initiatives cost-benefit, and employee engagement strategies.",
-            f"I'm {user} planning a digital marketing campaign. Cover target audience analysis, multi-channel strategies, content creation, budget allocation, and ROI tracking.",
-            f"Hello, {user} here. I need to understand data science workflow: collection, cleaning, analysis, visualization, and ML model selection for business intelligence.",
         ],
     }
 
-    # Get base prompt for category
     category_prompts = base_prompts.get(category, base_prompts["small"])
     base_prompt = random.choice(category_prompts)
 
-    # Estimate current token count (rough approximation: ~4 characters per token)
+    # Estimate current token count and add padding if needed
     current_tokens = len(base_prompt) // 4
-
-    # If we need more tokens, add padding
     if current_tokens < target_tokens:
         additional_tokens_needed = target_tokens - current_tokens
-
-        # Add content to reach target token count
         padding_phrases = [
             " Please provide detailed explanations with examples.",
             " I would appreciate comprehensive coverage of this topic.",
             " Include relevant background information and context.",
-            " Please elaborate on the key concepts and principles involved.",
-            " Provide practical applications and real-world scenarios.",
-            " Include any relevant statistics, data, or research findings.",
-            " Explain the historical context and development of this subject.",
-            " Discuss different perspectives and approaches to this topic.",
-            " Include potential challenges and solutions.",
-            " Provide step-by-step explanations where applicable.",
-            " Discuss the implications and potential future developments.",
-            " Include comparisons with alternative approaches or methods.",
-            " Explain the underlying mechanisms and processes involved.",
-            " Provide recommendations and best practices.",
-            " Discuss the broader context and interconnected factors.",
         ]
 
-        # Add padding until we reach target token count
-        padding_used = []
         while current_tokens < target_tokens and padding_phrases:
             phrase = random.choice(padding_phrases)
-            if phrase not in padding_used:  # Avoid duplicates
-                base_prompt += phrase
-                padding_used.append(phrase)
-                current_tokens = len(base_prompt) // 4
-            else:
-                break
-
-        # If still need more tokens, add repetitive content
-        if current_tokens < target_tokens:
-            remaining = target_tokens - current_tokens
-            filler = " Please provide additional details and explanations." * (
-                remaining // 8 + 1
-            )
-            base_prompt += filler[: remaining * 4]  # Approximate character count
+            base_prompt += phrase
+            current_tokens = len(base_prompt) // 4
 
     return base_prompt
 
 
 def load_vtc_dataset(dataset_path: str = VTC_DATASET_PATH) -> List[Dict]:
-    """
-    Load the VTC dataset from JSONL file.
-
-    Args:
-        dataset_path: Path to the VTC dataset JSONL file
-
-    Returns:
-        List of dataset entries with prompts and metadata
-    """
+    """Load the VTC dataset from JSONL file."""
     dataset = []
 
     if not os.path.exists(dataset_path):
         logger.warning(f"VTC dataset not found at {dataset_path}")
-        logger.warning("Run prepare_dataset.py first to create the dataset")
         return dataset
 
     with open(dataset_path, "r") as f:
@@ -881,18 +641,7 @@ def load_vtc_dataset(dataset_path: str = VTC_DATASET_PATH) -> List[Dict]:
 def get_prompt_from_dataset(
     vtc_dataset: List[Dict], user: str, category: str
 ) -> Optional[str]:
-    """
-    Get a prompt from the VTC dataset for a specific user and category.
-
-    Args:
-        vtc_dataset: Loaded VTC dataset
-        user: User name to match
-        category: User category to match
-
-    Returns:
-        Prompt content string or None if not found
-    """
-    # Find entries that match the user category
+    """Get a prompt from the VTC dataset for a specific user and category."""
     matching_entries = []
     for entry in vtc_dataset:
         for request in entry.get("requests", []):
@@ -903,11 +652,78 @@ def get_prompt_from_dataset(
         logger.warning(f"No prompts found for category {category} in dataset")
         return None
 
-    # Select a random prompt from matching entries
     selected_request = random.choice(matching_entries)
     prompt_content = selected_request.get("prompt", [{}])[0].get("content", "")
-
     return prompt_content
+
+
+def send_request_async(
+    i,
+    req_data,
+    send_time,
+    routing_algorithm,
+    traffic_pattern,
+    result_queue,
+    vtc_dataset,
+    use_real_dataset,
+):
+    """Send a single request asynchronously."""
+    user = req_data["user"]
+
+    if use_real_dataset:
+        prompt = get_prompt_from_dataset(vtc_dataset, user, req_data["category"])
+        if prompt is None:
+            prompt = generate_variable_prompt(
+                user,
+                req_data["category"],
+                req_data["min_tokens"],
+                req_data["max_tokens"],
+            )
+    else:
+        prompt = generate_variable_prompt(
+            user, req_data["category"], req_data["min_tokens"], req_data["max_tokens"]
+        )
+
+    logger.info(f"Request {i+1} - User: {user}, Algorithm: {routing_algorithm}")
+
+    result = make_non_streaming_req(user, prompt, routing_algorithm, output_tokens=20)
+
+    # Find user category and token range
+    user_category = next((cat for cat in USER_CATEGORIES if user in cat["users"]), None)
+    category_name = user_category["name"] if user_category else "unknown"
+    token_range = (
+        {
+            "min_tokens": user_category["min_tokens"] if user_category else 0,
+            "max_tokens": user_category["max_tokens"] if user_category else 0,
+            "token_scale": user_category["token_scale"] if user_category else 1,
+        }
+        if user_category
+        else None
+    )
+
+    # Track for analysis
+    result.update(
+        {
+            "user": user,
+            "algorithm": routing_algorithm,
+            "category": category_name,
+            "token_range": token_range,
+            "traffic_pattern": traffic_pattern,
+            "send_time": send_time,
+            "request_id": i,
+        }
+    )
+
+    result_queue.put((i, result))
+
+    if result["success"]:
+        logger.info(
+            f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
+        )
+    else:
+        logger.error(
+            f"Request {i+1} failed - Status: {result.get('status_code', 'Unknown')}, Error: {result.get('error', 'Unknown')[:50]}"
+        )
 
 
 def run_benchmark(
@@ -918,17 +734,7 @@ def run_benchmark(
     strict_mode: bool = False,
     skip_warmup: bool = False,
 ):
-    """
-    Run benchmark for specified traffic pattern and save results.
-
-    Args:
-        traffic_pattern: Traffic pattern to use
-        max_requests: Maximum number of requests to send
-        target_qps: Target queries per second (0 = no rate limit)
-        algorithms: List of algorithms to test (default: both random and vtc-basic)
-        strict_mode: If True, any failure invalidates comparison (default: 2% threshold)
-        skip_warmup: If True, skip the system warm-up phase
-    """
+    """Run benchmark for specified traffic pattern and save results."""
     if algorithms is None:
         algorithms = DEFAULT_ROUTING_ALGORITHMS
 
@@ -937,249 +743,124 @@ def run_benchmark(
         f"QPS: {target_qps if target_qps > 0 else 'unlimited'}, Algorithms: {algorithms}"
     )
 
-    # Create result directory
     result_dir = create_result_dir()
 
-    # Setup Redis users
     if not setup_redis_users():
         logger.error("Failed to setup Redis users, aborting benchmark")
         return
 
-    # Run system warm-up (unless skipped)
     if not skip_warmup:
-        logger.info("Running system warm-up...")
+        logger.info("Running system warm-up")
         if not run_system_warmup():
-            logger.warning(
-                "System warm-up had issues, but continuing with benchmark..."
-            )
+            logger.warning("System warm-up had issues, continuing")
     else:
-        logger.info("Skipping system warm-up (disabled)")
+        logger.info("Skipping system warm-up")
 
-    # Load VTC dataset for real prompts
-    logger.info("Loading VTC dataset for real prompts...")
+    # Load VTC dataset
+    logger.info("Loading VTC dataset")
     vtc_dataset = load_vtc_dataset()
     use_real_dataset = len(vtc_dataset) > 0
 
     if use_real_dataset:
-        logger.info("✅ Using real ShareGPT prompts from VTC dataset")
+        logger.info("Using real ShareGPT prompts from VTC dataset")
     else:
-        logger.warning(
-            "⚠️  VTC dataset not available, using synthetic prompt generation"
-        )
-        logger.warning("   For better results, run: python /tmp/create_vtc_dataset.py")
+        logger.warning("VTC dataset not available, using synthetic prompts")
 
     # Generate requests
     requests_data = prepare_requests(max_requests, traffic_pattern)
     logger.info(f"Generated {len(requests_data)} requests")
 
-    # Log request distribution
-    user_counts = {}
+    # Log distribution
     category_counts = {}
     for req in requests_data:
-        user = req["user"]
         category = req["category"]
-        user_counts[user] = user_counts.get(user, 0) + 1
         category_counts[category] = category_counts.get(category, 0) + 1
 
-    logger.info("Request distribution by category:")
+    logger.info("Request distribution:")
     for category, count in sorted(category_counts.items()):
         percentage = (count / len(requests_data)) * 100
         logger.info(f"  {category}: {count} requests ({percentage:.1f}%)")
 
-    logger.info(f"Total unique users: {len(user_counts)}")
-    logger.info(
-        f"Requests per user: min={min(user_counts.values())}, max={max(user_counts.values())}, avg={sum(user_counts.values())/len(user_counts):.1f}"
-    )
-
-    # Collect baseline system metrics
-    logger.info("Collecting baseline system metrics...")
+    # Collect baseline metrics
+    logger.info("Collecting baseline system metrics")
     baseline_metrics = collect_prometheus_metrics()
     save_system_metrics(result_dir, "baseline", baseline_metrics)
 
-    # Analyze baseline VTC configuration
-    baseline_vtc_analysis = analyze_vtc_metrics(baseline_metrics)
-    log_vtc_analysis(baseline_vtc_analysis, "Baseline")
-
-    # Track results for analysis
     results_by_algorithm = {}
-    all_requests = []  # For comprehensive stats
-    all_system_metrics = {
-        "baseline": baseline_metrics,
-    }
+    all_requests = []
+    all_system_metrics = {"baseline": baseline_metrics}
 
     # Run benchmark for each routing algorithm
     for routing_algorithm in algorithms:
         logger.info(f"Testing routing algorithm: {routing_algorithm}")
 
-        # Collect pre-algorithm metrics
         pre_algo_metrics = collect_prometheus_metrics()
         save_system_metrics(result_dir, f"pre_{routing_algorithm}", pre_algo_metrics)
         all_system_metrics[f"pre_{routing_algorithm}"] = pre_algo_metrics
 
-        # Analyze VTC metrics before algorithm
-        pre_vtc_analysis = analyze_vtc_metrics(pre_algo_metrics)
-        log_vtc_analysis(pre_vtc_analysis, f"Pre-{routing_algorithm}")
-
-        # Track requests for this algorithm
         algorithm_requests = []
 
-        # Calculate request timing based on QPS
         if target_qps > 0:
-            # Generate requests at specified QPS using threading for true async
+            # Async execution with QPS control
             interval = 1.0 / target_qps
             logger.info(
                 f"Generating requests at {target_qps} QPS (interval: {interval:.3f}s)"
             )
 
-            import queue
-            import threading
-
-            # Queue to store results
             result_queue = queue.Queue()
-
-            def send_request_async(i, req_data, send_time):
-                """Send a single request asynchronously"""
-                user = req_data["user"]
-
-                # Generate prompt from dataset or synthetically
-                if use_real_dataset:
-                    prompt = get_prompt_from_dataset(
-                        vtc_dataset, user, req_data["category"]
-                    )
-                    if prompt is None:
-                        # Fallback to synthetic if dataset doesn't have this category
-                        prompt = generate_variable_prompt(
-                            user,
-                            req_data["category"],
-                            req_data["min_tokens"],
-                            req_data["max_tokens"],
-                        )
-                else:
-                    prompt = generate_variable_prompt(
-                        user,
-                        req_data["category"],
-                        req_data["min_tokens"],
-                        req_data["max_tokens"],
-                    )
-
-                logger.info(
-                    f"Sending request {i+1}/{len(requests_data)} - User: {user}, Algorithm: {routing_algorithm}"
-                )
-
-                # Make request
-                result = make_non_streaming_req(
-                    user, prompt, routing_algorithm, output_tokens=20
-                )
-
-                # Find user category and token range
-                user_category = next(
-                    (cat for cat in USER_CATEGORIES if user in cat["users"]), None
-                )
-                category_name = user_category["name"] if user_category else "unknown"
-                token_range = (
-                    {
-                        "min_tokens": (
-                            user_category["min_tokens"] if user_category else 0
-                        ),
-                        "max_tokens": (
-                            user_category["max_tokens"] if user_category else 0
-                        ),
-                        "token_scale": (
-                            user_category["token_scale"] if user_category else 1
-                        ),
-                    }
-                    if user_category
-                    else None
-                )
-
-                # Save result
-                save_request_result(
-                    result_dir,
-                    i,
-                    user,
-                    routing_algorithm,
-                    traffic_pattern,
-                    result,
-                    category_name,
-                    token_range,
-                )
-
-                # Track for analysis
-                result["user"] = user
-                result["algorithm"] = routing_algorithm
-                result["category"] = category_name
-                result["token_range"] = token_range
-                result["traffic_pattern"] = traffic_pattern
-                result["send_time"] = send_time
-                result["request_id"] = i
-
-                # Put result in queue
-                result_queue.put((i, result))
-
-                # Log result
-                if result["success"]:
-                    logger.info(
-                        f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
-                    )
-                else:
-                    status_code = result.get("status_code", "Unknown")
-                    error_msg = result.get("error", "Unknown")
-                    logger.error(
-                        f"Request {i+1} failed - Status: {status_code}, Error: {error_msg[:100]}{'...' if len(error_msg) > 100 else ''}, Pod: {result['target_pod']}"
-                    )
-
-            # Schedule and send requests at precise intervals
-            start_time = time.time()
             threads = []
+            start_time = time.time()
 
             for i, req_data in enumerate(requests_data):
-                # Calculate when this request should be sent
                 scheduled_time = start_time + (i * interval)
                 current_time = time.time()
 
-                # Wait until it's time to send this request
                 if current_time < scheduled_time:
                     time.sleep(scheduled_time - current_time)
 
-                # Record actual send time
                 actual_send_time = time.time()
 
-                # Start thread to send request
                 thread = threading.Thread(
-                    target=send_request_async, args=(i, req_data, actual_send_time)
+                    target=send_request_async,
+                    args=(
+                        i,
+                        req_data,
+                        actual_send_time,
+                        routing_algorithm,
+                        traffic_pattern,
+                        result_queue,
+                        vtc_dataset,
+                        use_real_dataset,
+                    ),
                 )
                 thread.start()
                 threads.append(thread)
 
-            # Wait for all requests to complete
-            logger.info("Waiting for all requests to complete...")
+            logger.info("Waiting for all requests to complete")
             for thread in threads:
                 thread.join()
 
-            # Collect results from queue
+            # Collect results
             results_by_id = {}
             while not result_queue.empty():
                 request_id, result = result_queue.get()
                 results_by_id[request_id] = result
 
-            # Add results in order
             for i in range(len(requests_data)):
                 if i in results_by_id:
                     algorithm_requests.append(results_by_id[i])
                     all_requests.append(results_by_id[i].copy())
 
         else:
-            # Sequential execution (no QPS limit)
+            # Sequential execution
             for i, req_data in enumerate(requests_data):
                 user = req_data["user"]
 
-                # Generate prompt from dataset or synthetically
                 if use_real_dataset:
                     prompt = get_prompt_from_dataset(
                         vtc_dataset, user, req_data["category"]
                     )
                     if prompt is None:
-                        # Fallback to synthetic if dataset doesn't have this category
                         prompt = generate_variable_prompt(
                             user,
                             req_data["category"],
@@ -1195,15 +876,13 @@ def run_benchmark(
                     )
 
                 logger.info(
-                    f"Sending request {i+1}/{len(requests_data)} - User: {user}, Algorithm: {routing_algorithm}"
+                    f"Request {i+1}/{len(requests_data)} - User: {user}, Algorithm: {routing_algorithm}"
                 )
 
-                # Make request
                 result = make_non_streaming_req(
                     user, prompt, routing_algorithm, output_tokens=20
                 )
 
-                # Find user category and token range
                 user_category = next(
                     (cat for cat in USER_CATEGORIES if user in cat["users"]), None
                 )
@@ -1224,7 +903,6 @@ def run_benchmark(
                     else None
                 )
 
-                # Save result
                 save_request_result(
                     result_dir,
                     i,
@@ -1236,114 +914,68 @@ def run_benchmark(
                     token_range,
                 )
 
-                # Track for analysis
-                result["user"] = user
-                result["algorithm"] = routing_algorithm
-                result["category"] = category_name
-                result["token_range"] = token_range
-                result["traffic_pattern"] = traffic_pattern
+                result.update(
+                    {
+                        "user": user,
+                        "algorithm": routing_algorithm,
+                        "category": category_name,
+                        "token_range": token_range,
+                        "traffic_pattern": traffic_pattern,
+                    }
+                )
+
                 algorithm_requests.append(result)
                 all_requests.append(result.copy())
 
-                # Log result
                 if result["success"]:
                     logger.info(
                         f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
                     )
                 else:
-                    status_code = result.get("status_code", "Unknown")
-                    error_msg = result.get("error", "Unknown")
                     logger.error(
-                        f"Request {i+1} failed - Status: {status_code}, Error: {error_msg[:100]}{'...' if len(error_msg) > 100 else ''}, Pod: {result['target_pod']}"
+                        f"Request {i+1} failed - Status: {result.get('status_code', 'Unknown')}"
                     )
 
-        # Store requests for this algorithm
         results_by_algorithm[routing_algorithm] = algorithm_requests
 
-        # Collect post-algorithm metrics
         post_algo_metrics = collect_prometheus_metrics()
         save_system_metrics(result_dir, f"post_{routing_algorithm}", post_algo_metrics)
         all_system_metrics[f"post_{routing_algorithm}"] = post_algo_metrics
 
-        # Analyze VTC metrics after algorithm
-        post_vtc_analysis = analyze_vtc_metrics(post_algo_metrics)
-        log_vtc_analysis(post_vtc_analysis, f"Post-{routing_algorithm}")
-
-        # Wait between algorithms to let metrics settle
-        logger.info("Waiting 30 seconds before next algorithm...")
+        logger.info("Waiting 30 seconds before next algorithm")
         time.sleep(30)
 
-    # Collect final system metrics
-    logger.info("Collecting final system metrics...")
+    # Collect final metrics
+    logger.info("Collecting final system metrics")
     final_metrics = collect_prometheus_metrics()
     save_system_metrics(result_dir, "final", final_metrics)
     all_system_metrics["final"] = final_metrics
 
-    # Final VTC analysis
-    final_vtc_analysis = analyze_vtc_metrics(final_metrics)
-    log_vtc_analysis(final_vtc_analysis, "Final")
-
-    # Validate success rates before analysis
+    # Validate success rates
     success_rate_validation = validate_success_rates(results_by_algorithm, strict_mode)
 
-    # Log success rate summary
-    logger.info("=" * 60)
-    logger.info(
-        f"SUCCESS RATE VALIDATION {'(STRICT MODE)' if strict_mode else '(RELAXED MODE)'}"
-    )
-    logger.info("=" * 60)
-
+    logger.info("Success rate validation")
     valid_for_comparison = True
     threshold = 0.0 if strict_mode else 2.0
 
     for algorithm, stats in success_rate_validation.items():
-        total = stats["total_requests"]
-        successful = stats["successful_requests"]
-        failed = stats["failed_requests"]
         success_rate = stats["success_rate"]
         failure_rate = stats["failure_rate"]
 
-        logger.info(f"{algorithm.upper()} Algorithm:")
-        logger.info(f"  Total requests: {total}")
-        logger.info(f"  Successful: {successful} ({success_rate:.1f}%)")
-        logger.info(f"  Failed: {failed} ({failure_rate:.1f}%)")
+        logger.info(
+            f"{algorithm}: {stats['successful_requests']}/{stats['total_requests']} successful ({success_rate:.1f}%)"
+        )
 
         if failure_rate > threshold:
-            if strict_mode:
-                logger.error(
-                    f"  ❌ STRICT MODE: ANY FAILURE INVALIDATES COMPARISON ({failure_rate:.1f}% > 0.0%)"
-                )
-            else:
-                logger.error(
-                    f"  ❌ FAILURE RATE TOO HIGH: {failure_rate:.1f}% > {threshold}%"
-                )
+            logger.error(f"  Failure rate too high: {failure_rate:.1f}% > {threshold}%")
             valid_for_comparison = False
         else:
-            if strict_mode:
-                logger.info(
-                    f"  ✅ Strict mode: No failures detected ({failure_rate:.1f}% = 0.0%)"
-                )
-            else:
-                logger.info(
-                    f"  ✅ Success rate acceptable: {failure_rate:.1f}% ≤ {threshold}%"
-                )
-
-        # Log failed request details
-        if failed > 0:
-            logger.warning(f"  Failed request details:")
-            for req in stats["failed_details"]:
-                logger.warning(
-                    f"    Request {req['request_id']}: {req['error_summary']}"
-                )
-
-    logger.info("=" * 60)
+            logger.info(
+                f"  Success rate acceptable: {failure_rate:.1f}% <= {threshold}%"
+            )
 
     if not valid_for_comparison:
-        logger.error("❌ BENCHMARK INVALID: High failure rates detected!")
-        logger.error("   Cannot perform reliable fairness comparison.")
-        logger.error("   Please check system connectivity and retry.")
-
-        # Still save the analysis but mark it as invalid
+        logger.error("Benchmark invalid: High failure rates detected")
         fairness_analysis = analyze_fairness_metrics(results_by_algorithm)
         fairness_analysis["validation"] = {
             "valid_for_comparison": False,
@@ -1351,25 +983,21 @@ def run_benchmark(
             "success_rates": success_rate_validation,
         }
     else:
-        logger.info(
-            "✅ SUCCESS RATE VALIDATION PASSED - Proceeding with fairness analysis"
-        )
-
-        # Comprehensive fairness analysis
+        logger.info("Success rate validation passed")
         fairness_analysis = analyze_fairness_metrics(results_by_algorithm)
         fairness_analysis["validation"] = {
             "valid_for_comparison": True,
             "success_rates": success_rate_validation,
         }
 
-    # Save fairness analysis to file
+    # Save results
     fairness_file = f"{result_dir}/fairness_analysis.json"
     with open(fairness_file, "w") as f:
         json.dump(fairness_analysis, f, indent=2)
     logger.info(f"Fairness analysis saved to: {fairness_file}")
 
-    # Check for potential routing issues (pod concentration)
-    logger.info("Checking for potential routing concentration issues...")
+    # Check routing concentration
+    logger.info("Checking routing concentration")
     for algorithm, requests in results_by_algorithm.items():
         successful_requests = [req for req in requests if req.get("success", False)]
         if not successful_requests:
@@ -1382,31 +1010,22 @@ def run_benchmark(
 
         total_requests = len(successful_requests)
         if total_requests > 0:
-            # Check if one pod received more than 80% of requests
             max_pod_requests = max(pod_counts.values())
             max_pod_percentage = (max_pod_requests / total_requests) * 100
 
             if max_pod_percentage > 80:
-                logger.warning(f"⚠️  ROUTING CONCENTRATION WARNING for {algorithm}:")
                 logger.warning(
-                    f"   One pod received {max_pod_requests}/{total_requests} requests ({max_pod_percentage:.1f}%)"
+                    f"Routing concentration warning for {algorithm}: {max_pod_percentage:.1f}%"
                 )
-                logger.warning(
-                    f"   This may indicate routing is not distributing properly"
-                )
-                logger.warning(f"   Pod distribution: {pod_counts}")
             else:
-                logger.info(
-                    f"✅ Pod distribution looks healthy for {algorithm}: {pod_counts}"
-                )
+                logger.info(f"Pod distribution healthy for {algorithm}: {pod_counts}")
 
-    # Save comprehensive benchmark statistics
-    logger.info("Generating comprehensive benchmark statistics...")
+    # Save comprehensive stats
+    logger.info("Generating comprehensive benchmark statistics")
     comprehensive_stats_file = save_comprehensive_stats(
         result_dir, all_requests, all_system_metrics
     )
 
-    # Log fairness summary only if validation passed
     if len(algorithms) > 1:
         if valid_for_comparison:
             log_fairness_summary(fairness_analysis)
@@ -1414,60 +1033,47 @@ def run_benchmark(
             logger.error("Skipping fairness comparison due to high failure rates")
     else:
         logger.info(f"Single algorithm test completed: {algorithms[0]}")
-        logger.info("Run with multiple algorithms to see fairness comparison")
+
     logger.info(f"Benchmark completed. Results saved to: {result_dir}")
-    logger.info(
-        "System metrics collected at: baseline, pre/post each algorithm, and final"
-    )
     return result_dir
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="VTC Benchmarking and Stats Collection",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        description="VTC Benchmarking and Stats Collection"
     )
-
     parser.add_argument(
         "--requests", type=int, default=5, help="Maximum number of requests to send"
     )
-
     parser.add_argument(
         "--pattern",
         choices=list(TRAFFIC_PATTERNS.keys()),
         default="balanced",
         help="Traffic pattern to use",
     )
-
     parser.add_argument(
         "--qps",
         type=float,
         default=0,
-        help="Target queries per second (0 = sequential execution)",
+        help="Target queries per second (0 = sequential)",
     )
-
     parser.add_argument(
-        "--stream", action="store_true", help="Use streaming mode (not implemented yet)"
+        "--stream", action="store_true", help="Use streaming mode (not implemented)"
     )
-
     parser.add_argument(
         "--algorithms",
         nargs="+",
         choices=DEFAULT_ROUTING_ALGORITHMS,
         default=None,
-        help="Routing algorithms to test (default: all algorithms)",
+        help="Routing algorithms to test",
     )
-
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="Strict mode: any request failure invalidates comparison (default: 2%% threshold)",
+        help="Strict mode: any request failure invalidates comparison",
     )
-
     parser.add_argument(
-        "--no-warmup",
-        action="store_true",
-        help="Skip system warm-up phase (10 short requests with VTC routing)",
+        "--no-warmup", action="store_true", help="Skip system warm-up phase"
     )
 
     args = parser.parse_args()
@@ -1476,25 +1082,18 @@ def main():
         logger.error("Streaming mode not implemented yet")
         return
 
-    # Determine which algorithms to run
     algorithms_to_test = (
         args.algorithms if args.algorithms else DEFAULT_ROUTING_ALGORITHMS
     )
 
-    logger.info("=" * 60)
     logger.info("VTC Benchmarking Configuration")
-    logger.info("=" * 60)
     logger.info(f"Requests: {args.requests}")
     logger.info(f"Pattern: {args.pattern}")
     logger.info(f"QPS: {args.qps if args.qps > 0 else 'Sequential'}")
     logger.info(f"Algorithms: {', '.join(algorithms_to_test)}")
-    logger.info(
-        f"Validation: {'Strict (0% failure tolerance)' if args.strict else 'Relaxed (2% failure tolerance)'}"
-    )
+    logger.info(f"Validation: {'Strict' if args.strict else 'Relaxed'}")
     logger.info(f"Warm-up: {'Disabled' if args.no_warmup else 'Enabled'}")
-    logger.info("=" * 60)
 
-    # Run benchmark
     result_dir = run_benchmark(
         traffic_pattern=args.pattern,
         max_requests=args.requests,
@@ -1505,14 +1104,10 @@ def main():
     )
 
     if result_dir:
-        print(f"\nBenchmark completed successfully!")
-        print(f"Results saved to: {result_dir}")
-        print("\nTo analyze results, you can:")
-        print(f"  python run_analysis.py {result_dir}")
-        print(f"  python run_analysis.py {result_dir} --fairness-only")
-        print(f"  python run_analysis.py {result_dir} --vtc-only")
+        logger.info("Benchmark completed successfully")
+        logger.info(f"Results saved to: {result_dir}")
     else:
-        print("Benchmark failed!")
+        logger.error("Benchmark failed")
 
 
 if __name__ == "__main__":
