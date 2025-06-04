@@ -24,7 +24,7 @@ cd aibrix
 make dev-install-in-kind
 cd benchmarks/plot/aibrix0.3-routing/vtc-basic
 kubectl apply -f tiny-llama__m3max.yaml
-kubectl apply -k config
+kubectl apply -k config/standard-bench
 ```
 
 ### Run
