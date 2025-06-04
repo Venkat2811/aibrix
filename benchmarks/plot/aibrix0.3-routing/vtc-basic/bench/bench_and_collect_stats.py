@@ -33,7 +33,9 @@ PROMETHEUS_URL = "http://localhost:9090"
 DEFAULT_ROUTING_ALGORITHMS = ["random", "vtc-basic"]
 
 # Add this near the top with other constants
-VTC_DATASET_PATH = "temp_workspace/dataset/vtc_routing_dataset_varied.jsonl"
+VTC_DATASET_PATH = (
+    "temp_workspace/dataset/vtc_routing_dataset_varied_cpu_optimized.jsonl"
+)
 
 
 def setup_redis_users():
@@ -94,8 +96,8 @@ def setup_redis_users():
 
 def run_system_warmup():
     """
-    Run system warm-up with short requests using random routing.
-    This helps initialize pods, establish connections, and populate caches.
+    Run system warm-up with short requests using VTC routing.
+    This helps initialize pods, establish connections, populate caches, and build VTC token history.
     """
     logger.info("=" * 50)
     logger.info("🔥 SYSTEM WARM-UP PHASE")
@@ -126,7 +128,7 @@ def run_system_warmup():
     successful_warmup = 0
     failed_warmup = 0
 
-    logger.info(f"Sending {warmup_requests} warm-up requests with random routing...")
+    logger.info(f"Sending {warmup_requests} warm-up requests with VTC routing...")
 
     for i in range(warmup_requests):
         # Select random user and prompt
@@ -135,11 +137,11 @@ def run_system_warmup():
 
         logger.info(f"Warm-up {i+1}/{warmup_requests} - User: {user}")
 
-        # Make warm-up request with random routing and short output
+        # Make warm-up request with VTC routing to build token history
         result = make_non_streaming_req(
             user=user,
             prompt=prompt,
-            routing_algorithm="random",  # Use random routing for warm-up
+            routing_algorithm="vtc-basic",  # Use VTC routing for warm-up to build token history
             output_tokens=5,  # Very short responses
         )
 
@@ -167,6 +169,7 @@ def run_system_warmup():
 
     if warmup_success_rate >= 80:
         logger.info("  ✅ System warm-up completed successfully!")
+        logger.info("  🎯 VTC token history initialized for users!")
     else:
         logger.warning("  ⚠️  Warm-up had high failure rate - system may not be ready")
 
@@ -763,16 +766,37 @@ def generate_variable_prompt(
             f"I'm {user}. Can you explain what AI is?",
             f"Hello, I'm {user}. What's your favorite color?",
         ],
+        "sm-small": [  # CPU-optimized small category (5-25 tokens)
+            f"Hello, I am {user}. Tell me a short story.",
+            f"Hi {user}. What's the weather?",
+            f"I'm {user}. Explain AI basics.",
+            f"Hello, {user} here. Favorite color?",
+            f"Hi {user}. How are you?",
+            f"I'm {user}. Fun fact please.",
+        ],
         "medium": [
             f"Hello, I am {user}. I'm working on a project about renewable energy and would like you to explain the differences between solar, wind, and hydroelectric power generation methods, including their advantages and disadvantages.",
             f"Hi, I'm {user}. Can you help me understand machine learning algorithms and provide examples of supervised versus unsupervised learning techniques used in data science?",
             f"I'm {user} and I need assistance with planning a comprehensive marketing strategy for a small business, including digital marketing, social media presence, and customer engagement tactics.",
             f"Hello {user} here. Please explain the process of photosynthesis in plants, including the light-dependent and light-independent reactions, and how they contribute to the ecosystem.",
         ],
+        "sm-medium": [  # CPU-optimized medium category (26-50 tokens)
+            f"Hello, I am {user}. Can you explain how machine learning works in simple terms?",
+            f"Hi {user}. I'm planning a garden and need advice on vegetables that grow well together.",
+            f"I'm {user}. Help me understand cryptocurrency basics for beginners.",
+            f"Hello, {user} here. Describe differences between solar and wind energy for homes.",
+            f"Hi {user}. I need a simple pasta recipe with vegetables that's nutritious.",
+        ],
         "high": [
             f"Hello, I am {user}. I'm conducting research on the economic implications of climate change policies and their impact on developing nations. Could you provide a comprehensive analysis that covers the following aspects: 1) The relationship between carbon pricing mechanisms and economic growth in emerging markets, 2) How international climate agreements like the Paris Accord affect trade relationships and economic competitiveness, 3) The role of green technology transfer in addressing climate adaptation challenges, 4) Policy recommendations for balancing environmental protection with economic development goals, and 5) Case studies of successful climate policy implementation in developing countries. Please include relevant data, economic models, and cite specific examples where possible.",
             f"Hi, I'm {user}, a graduate student working on my thesis about the intersection of artificial intelligence and healthcare systems. I need a detailed explanation covering: the current applications of machine learning in medical diagnosis and treatment, ethical considerations around AI decision-making in healthcare, privacy and security challenges with patient data, regulatory frameworks governing AI in medicine, the potential for AI to reduce healthcare costs and improve access, integration challenges with existing hospital systems, and future trends in AI-powered personalized medicine. Please provide specific examples, research findings, and discuss both the opportunities and risks associated with each aspect.",
             f"I'm {user} and I'm preparing a comprehensive business proposal for sustainable urban development. The proposal needs to address: innovative green building technologies and their cost-effectiveness, smart city infrastructure including IoT sensors and data analytics, sustainable transportation systems and their integration with existing urban planning, waste management solutions including circular economy principles, energy-efficient systems and renewable energy integration, water conservation and management strategies, community engagement and social impact considerations, financing models for sustainable development projects, regulatory compliance and zoning requirements, and long-term maintenance and scalability plans. Please provide detailed technical specifications, cost-benefit analyses, and real-world implementation examples for each component.",
+        ],
+        "sm-high": [  # CPU-optimized high category (51-80 tokens)
+            f"Hello, I am {user}. I'm developing a mobile app for personal finance and need guidance on features, UX design, security, and banking API integration.",
+            f"Hi {user}. I'm researching sustainable business practices for a company. Explain environmental impact reduction, green initiatives cost-benefit, and employee engagement strategies.",
+            f"I'm {user} planning a digital marketing campaign. Cover target audience analysis, multi-channel strategies, content creation, budget allocation, and ROI tracking.",
+            f"Hello, {user} here. I need to understand data science workflow: collection, cleaning, analysis, visualization, and ML model selection for business intelligence.",
         ],
     }
 
@@ -1443,7 +1467,7 @@ def main():
     parser.add_argument(
         "--no-warmup",
         action="store_true",
-        help="Skip system warm-up phase (10 short requests with random routing)",
+        help="Skip system warm-up phase (10 short requests with VTC routing)",
     )
 
     args = parser.parse_args()

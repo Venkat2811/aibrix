@@ -10,10 +10,10 @@ spec:
       - name: gateway-plugin
         env:
         - name: AIBRIX_ROUTER_VTC_TOKEN_TRACKER_WINDOW_SIZE
-          value: "2"
+          value: "5"
         - name: AIBRIX_ROUTER_VTC_TOKEN_TRACKER_TIME_UNIT
           value: "minutes"
         - name: AIBRIX_ROUTER_VTC_TOKEN_TRACKER_MIN_TOKENS
-          value: "20"
+          value: "5"
         - name: AIBRIX_ROUTER_VTC_TOKEN_TRACKER_MAX_TOKENS
-          value: "200"
+          value: "150"

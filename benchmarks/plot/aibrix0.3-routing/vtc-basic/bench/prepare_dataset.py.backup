@@ -39,23 +39,23 @@ CPU_ONLY_USER_CATEGORIES = [
         "users": ["sm-user-small-1", "sm-user-small-2", "sm-user-small-3"],
         "token_scale": 0.5,
         "min_tokens": 5,
-        "max_tokens": 35,
+        "max_tokens": 25,
         "target_percentage": 0.4,  # 40% of requests
     },
     {
         "name": "sm-medium",
         "users": ["sm-user-med-1", "sm-user-med-2", "sm-user-med-3"],
         "token_scale": 1.0,
-        "min_tokens": 45,
-        "max_tokens": 75,
+        "min_tokens": 26,
+        "max_tokens": 50,
         "target_percentage": 0.35,  # 35% of requests
     },
     {
         "name": "sm-high",
         "users": ["sm-user-high-1", "sm-user-high-2", "sm-user-high-3"],
         "token_scale": 1.5,
-        "min_tokens": 85,
-        "max_tokens": 130,
+        "min_tokens": 51,
+        "max_tokens": 80,
         "target_percentage": 0.25,  # 25% of requests
     },
 ]
