@@ -71,6 +71,12 @@ python bench_and_collect_stats.py --requests 100 --pattern balanced --qps 10 --a
 
 # Strict mode - any failure invalidates comparison
 python bench_and_collect_stats.py --requests 20 --qps 2 --strict
+
+# Test with streaming mode for TTFT/TPOT metrics
+python bench_and_collect_stats.py --requests 20 --qps 2 --stream
+
+# Streaming mode with specific algorithms
+python bench_and_collect_stats.py --requests 50 --pattern balanced --algorithms vtc-basic --stream
 ```
 
 **Command-line options:**
@@ -80,7 +86,7 @@ python bench_and_collect_stats.py --requests 20 --qps 2 --strict
 - `--qps`: Target queries per second, 0 = sequential (default: 0)
 - `--algorithms`: Space-separated list of algorithms to test (default: both random and vtc-basic)
 - `--strict`: Strict validation mode - any failure invalidates comparison (default: 2% threshold)
-- `--stream`: Enable streaming mode (not implemented yet)
+- `--stream`: Enable streaming mode with TTFT (Time to First Token) and TPOT (Time Per Output Token) metrics
 
 ### 3. Analyze Results
 
@@ -116,10 +122,14 @@ The benchmark defines three user categories based on token consumption:
 
 ### Application Metrics
 
-- Request latency
+- Request latency (total response time)
 - Success/failure rates
 - Pod assignment per request
 - Token counts (prompt/completion/total)
+- **Streaming metrics** (when `--stream` is enabled):
+  - **TTFT** (Time to First Token): Time from request start to first token
+  - **TPOT** (Time Per Output Token): Average time between tokens
+  - Token-by-token timing analysis
 
 ### System Metrics (via Prometheus)
 
@@ -143,8 +153,14 @@ The benchmark defines three user categories based on token consumption:
    - Overall fairness assessment
 
 3. **Pod Distribution**:
+
    - Request distribution across pods
    - Load balancing effectiveness
+
+4. **Streaming Performance** (when `--stream` is enabled):
+   - TTFT statistics (avg, percentiles, std dev)
+   - TPOT statistics (avg, percentiles, std dev)
+   - Per-category streaming performance comparison
 
 ## Success Rate Validation
 
@@ -191,6 +207,13 @@ With 5 requests in balanced mode:
 
 VTC Configuration Status: good
 VTC Stability: stable
+```
+
+With streaming mode enabled:
+
+```
+Request 1 successful - Latency: 2.45s, Pod: tinyllama-pod-1, TTFT: 0.123s, TPOT: 0.089s
+Request 2 successful - Latency: 1.87s, Pod: tinyllama-pod-2, TTFT: 0.098s, TPOT: 0.076s
 ```
 
 For production validation, scale up to 100-1000 requests for statistically significant results.

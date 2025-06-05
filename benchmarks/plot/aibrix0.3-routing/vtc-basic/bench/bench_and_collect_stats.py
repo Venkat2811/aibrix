@@ -91,9 +91,9 @@ def setup_redis_users():
         return False
 
 
-def run_system_warmup():
+def run_system_warmup(streaming_mode=False):
     """Run system warm-up with short requests using VTC routing."""
-    logger.info("Running system warm-up")
+    logger.info(f"Running system warm-up (streaming: {streaming_mode})")
 
     warmup_requests = 10
     warmup_users = [user for category in USER_CATEGORIES for user in category["users"]]
@@ -113,9 +113,14 @@ def run_system_warmup():
 
         logger.info(f"Warm-up {i+1}/{warmup_requests} - User: {user}")
 
-        result = make_non_streaming_req(
-            user=user, prompt=prompt, routing_algorithm="vtc-basic", output_tokens=5
-        )
+        if streaming_mode:
+            result = make_streaming_req(
+                user=user, prompt=prompt, routing_algorithm="vtc-basic", output_tokens=5
+            )
+        else:
+            result = make_non_streaming_req(
+                user=user, prompt=prompt, routing_algorithm="vtc-basic", output_tokens=5
+            )
 
         if result["success"]:
             successful_warmup += 1
@@ -202,15 +207,172 @@ def make_non_streaming_req(
 
     except Exception as e:
         end_time = time.time()
+        latency = end_time - start_time
         return {
             "success": False,
-            "latency": end_time - start_time,
-            "status_code": 0,
+            "latency": latency,
+            "status_code": None,
             "target_pod": "unknown",
             "error": str(e),
             "prompt_tokens": len(prompt.split()),
             "completion_tokens": 0,
             "total_tokens": 0,
+        }
+
+
+def make_streaming_req(
+    user: str, prompt: str, routing_algorithm: str, output_tokens: int = 20
+) -> Dict:
+    """Make a streaming request to the VTC system with TTFT and TPOT metrics."""
+    headers = {
+        "Content-Type": "application/json",
+        "user": user,
+        "routing-strategy": routing_algorithm,
+        "model": "tinyllama-1-1b-chat-v1-0",
+        "Accept": "text/event-stream",
+    }
+
+    payload = {
+        "model": "tinyllama-1-1b-chat-v1-0",
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": output_tokens,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+
+    start_time = time.time()
+    ttft = None  # Time to First Token
+    tpot_values = []  # Time Per Output Token
+    last_token_time = None
+    completion_text = ""
+    completion_tokens = 0
+    target_pod = "unknown"
+
+    try:
+        response = requests.post(
+            f"{GATEWAY_URL}/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            stream=True,
+            timeout=120,
+        )
+
+        target_pod = response.headers.get("target-pod", "unknown")
+
+        if response.status_code != 200:
+            end_time = time.time()
+            latency = end_time - start_time
+            return {
+                "success": False,
+                "latency": latency,
+                "status_code": response.status_code,
+                "target_pod": target_pod,
+                "error": response.text,
+                "prompt_tokens": len(prompt.split()),
+                "completion_tokens": 0,
+                "total_tokens": 0,
+                "ttft": None,
+                "tpot_avg": None,
+                "tpot_values": [],
+            }
+
+        # Process streaming response
+        for line in response.iter_lines():
+            if line:
+                current_time = time.time()
+                line_str = line.decode("utf-8").strip()
+
+                # Skip non-data lines
+                if not line_str.startswith("data: "):
+                    continue
+
+                data_str = line_str[6:]  # Remove 'data: ' prefix
+
+                # Check for end of stream
+                if data_str == "[DONE]":
+                    break
+
+                try:
+                    data = json.loads(data_str)
+
+                    # Extract token from response
+                    if "choices" in data and len(data["choices"]) > 0:
+                        choice = data["choices"][0]
+
+                        if "delta" in choice and "content" in choice["delta"]:
+                            token_content = choice["delta"]["content"]
+
+                            if token_content:  # Only process non-empty tokens
+                                completion_text += token_content
+                                completion_tokens += 1
+
+                                # Record TTFT (time to first token)
+                                if ttft is None:
+                                    ttft = current_time - start_time
+                                    last_token_time = current_time
+                                else:
+                                    # Record TPOT (time per output token)
+                                    if last_token_time is not None:
+                                        tpot = current_time - last_token_time
+                                        tpot_values.append(tpot)
+                                    last_token_time = current_time
+
+                        # Check if this is the final message
+                        if choice.get("finish_reason") is not None:
+                            break
+
+                except json.JSONDecodeError:
+                    # Skip malformed JSON lines
+                    continue
+
+        end_time = time.time()
+        total_latency = end_time - start_time
+
+        # Calculate average TPOT
+        tpot_avg = sum(tpot_values) / len(tpot_values) if tpot_values else None
+
+        return {
+            "success": True,
+            "latency": total_latency,
+            "status_code": response.status_code,
+            "target_pod": target_pod,
+            "response_data": {
+                "choices": [{"message": {"content": completion_text}}],
+                "usage": {
+                    "completion_tokens": completion_tokens,
+                    "prompt_tokens": len(prompt.split()),
+                    "total_tokens": len(prompt.split()) + completion_tokens,
+                },
+            },
+            "prompt_tokens": len(prompt.split()),
+            "completion_tokens": completion_tokens,
+            "total_tokens": len(prompt.split()) + completion_tokens,
+            "ttft": ttft,
+            "tpot_avg": tpot_avg,
+            "tpot_values": tpot_values,
+            "streaming_metrics": {
+                "ttft": ttft,
+                "tpot_avg": tpot_avg,
+                "tpot_count": len(tpot_values),
+                "completion_text": completion_text,
+            },
+        }
+
+    except Exception as e:
+        end_time = time.time()
+        latency = end_time - start_time
+        return {
+            "success": False,
+            "latency": latency,
+            "status_code": None,
+            "target_pod": target_pod,
+            "error": str(e),
+            "prompt_tokens": len(prompt.split()),
+            "completion_tokens": 0,
+            "total_tokens": 0,
+            "ttft": None,
+            "tpot_avg": None,
+            "tpot_values": [],
         }
 
 
@@ -471,6 +633,57 @@ def save_comprehensive_stats(
             )
         stats_data["token_analysis"][algorithm] = token_data
 
+        # Streaming metrics analysis (if available)
+        streaming_data = []
+        ttft_values = []
+        tpot_values = []
+        for req in successful_requests:
+            if req.get("ttft") is not None:
+                streaming_data.append(
+                    {
+                        "ttft": req.get("ttft"),
+                        "tpot_avg": req.get("tpot_avg"),
+                        "tpot_count": len(req.get("tpot_values", [])),
+                        "completion_tokens": req.get("completion_tokens", 0),
+                        "category": req.get("category", "unknown"),
+                        "latency": req.get("latency", 0),
+                    }
+                )
+                ttft_values.append(req.get("ttft"))
+                if req.get("tpot_avg") is not None:
+                    tpot_values.append(req.get("tpot_avg"))
+
+        if streaming_data:
+            stats_data["streaming_analysis"] = stats_data.get("streaming_analysis", {})
+            stats_data["streaming_analysis"][algorithm] = {
+                "streaming_requests": len(streaming_data),
+                "ttft_stats": {
+                    "avg": sum(ttft_values) / len(ttft_values) if ttft_values else 0,
+                    "min": min(ttft_values) if ttft_values else 0,
+                    "max": max(ttft_values) if ttft_values else 0,
+                    "std": np.std(ttft_values) if ttft_values else 0,
+                    "p50": np.percentile(ttft_values, 50) if ttft_values else 0,
+                    "p90": np.percentile(ttft_values, 90) if ttft_values else 0,
+                    "p95": np.percentile(ttft_values, 95) if ttft_values else 0,
+                },
+                "tpot_stats": (
+                    {
+                        "avg": (
+                            sum(tpot_values) / len(tpot_values) if tpot_values else 0
+                        ),
+                        "min": min(tpot_values) if tpot_values else 0,
+                        "max": max(tpot_values) if tpot_values else 0,
+                        "std": np.std(tpot_values) if tpot_values else 0,
+                        "p50": np.percentile(tpot_values, 50) if tpot_values else 0,
+                        "p90": np.percentile(tpot_values, 90) if tpot_values else 0,
+                        "p95": np.percentile(tpot_values, 95) if tpot_values else 0,
+                    }
+                    if tpot_values
+                    else None
+                ),
+                "detailed_data": streaming_data,
+            }
+
         # Routing effectiveness
         pod_user_mapping = {}
         for req in successful_requests:
@@ -666,6 +879,7 @@ def send_request_async(
     result_queue,
     vtc_dataset,
     use_real_dataset,
+    streaming_mode=False,
 ):
     """Send a single request asynchronously."""
     user = req_data["user"]
@@ -684,9 +898,16 @@ def send_request_async(
             user, req_data["category"], req_data["min_tokens"], req_data["max_tokens"]
         )
 
-    logger.info(f"Request {i+1} - User: {user}, Algorithm: {routing_algorithm}")
+    logger.info(
+        f"Request {i+1} - User: {user}, Algorithm: {routing_algorithm}, Streaming: {streaming_mode}"
+    )
 
-    result = make_non_streaming_req(user, prompt, routing_algorithm, output_tokens=20)
+    if streaming_mode:
+        result = make_streaming_req(user, prompt, routing_algorithm, output_tokens=20)
+    else:
+        result = make_non_streaming_req(
+            user, prompt, routing_algorithm, output_tokens=20
+        )
 
     # Find user category and token range
     user_category = next((cat for cat in USER_CATEGORIES if user in cat["users"]), None)
@@ -717,9 +938,15 @@ def send_request_async(
     result_queue.put((i, result))
 
     if result["success"]:
-        logger.info(
-            f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
-        )
+        if streaming_mode and result.get("ttft") is not None:
+            logger.info(
+                f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}, "
+                f"TTFT: {result['ttft']:.3f}s, TPOT: {result.get('tpot_avg', 'N/A'):.3f}s"
+            )
+        else:
+            logger.info(
+                f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
+            )
     else:
         logger.error(
             f"Request {i+1} failed - Status: {result.get('status_code', 'Unknown')}, Error: {result.get('error', 'Unknown')[:50]}"
@@ -733,6 +960,7 @@ def run_benchmark(
     algorithms: List[str] = None,
     strict_mode: bool = False,
     skip_warmup: bool = False,
+    streaming_mode: bool = False,
 ):
     """Run benchmark for specified traffic pattern and save results."""
     if algorithms is None:
@@ -740,7 +968,8 @@ def run_benchmark(
 
     logger.info(
         f"Starting benchmark - Pattern: {traffic_pattern}, Max requests: {max_requests}, "
-        f"QPS: {target_qps if target_qps > 0 else 'unlimited'}, Algorithms: {algorithms}"
+        f"QPS: {target_qps if target_qps > 0 else 'unlimited'}, Algorithms: {algorithms}, "
+        f"Streaming: {streaming_mode}"
     )
 
     result_dir = create_result_dir()
@@ -751,7 +980,7 @@ def run_benchmark(
 
     if not skip_warmup:
         logger.info("Running system warm-up")
-        if not run_system_warmup():
+        if not run_system_warmup(streaming_mode):
             logger.warning("System warm-up had issues, continuing")
     else:
         logger.info("Skipping system warm-up")
@@ -831,6 +1060,7 @@ def run_benchmark(
                         result_queue,
                         vtc_dataset,
                         use_real_dataset,
+                        streaming_mode,
                     ),
                 )
                 thread.start()
@@ -876,12 +1106,17 @@ def run_benchmark(
                     )
 
                 logger.info(
-                    f"Request {i+1}/{len(requests_data)} - User: {user}, Algorithm: {routing_algorithm}"
+                    f"Request {i+1}/{len(requests_data)} - User: {user}, Algorithm: {routing_algorithm}, Streaming: {streaming_mode}"
                 )
 
-                result = make_non_streaming_req(
-                    user, prompt, routing_algorithm, output_tokens=20
-                )
+                if streaming_mode:
+                    result = make_streaming_req(
+                        user, prompt, routing_algorithm, output_tokens=20
+                    )
+                else:
+                    result = make_non_streaming_req(
+                        user, prompt, routing_algorithm, output_tokens=20
+                    )
 
                 user_category = next(
                     (cat for cat in USER_CATEGORIES if user in cat["users"]), None
@@ -928,9 +1163,15 @@ def run_benchmark(
                 all_requests.append(result.copy())
 
                 if result["success"]:
-                    logger.info(
-                        f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
-                    )
+                    if streaming_mode and result.get("ttft") is not None:
+                        logger.info(
+                            f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}, "
+                            f"TTFT: {result['ttft']:.3f}s, TPOT: {result.get('tpot_avg', 'N/A'):.3f}s"
+                        )
+                    else:
+                        logger.info(
+                            f"Request {i+1} successful - Latency: {result['latency']:.2f}s, Pod: {result['target_pod']}"
+                        )
                 else:
                     logger.error(
                         f"Request {i+1} failed - Status: {result.get('status_code', 'Unknown')}"
@@ -1058,7 +1299,9 @@ def main():
         help="Target queries per second (0 = sequential)",
     )
     parser.add_argument(
-        "--stream", action="store_true", help="Use streaming mode (not implemented)"
+        "--stream",
+        action="store_true",
+        help="Use streaming mode with TTFT/TPOT metrics",
     )
     parser.add_argument(
         "--algorithms",
@@ -1078,9 +1321,9 @@ def main():
 
     args = parser.parse_args()
 
+    # Streaming mode is now implemented
     if args.stream:
-        logger.error("Streaming mode not implemented yet")
-        return
+        logger.info("Streaming mode enabled - will collect TTFT and TPOT metrics")
 
     algorithms_to_test = (
         args.algorithms if args.algorithms else DEFAULT_ROUTING_ALGORITHMS
@@ -1093,6 +1336,7 @@ def main():
     logger.info(f"Algorithms: {', '.join(algorithms_to_test)}")
     logger.info(f"Validation: {'Strict' if args.strict else 'Relaxed'}")
     logger.info(f"Warm-up: {'Disabled' if args.no_warmup else 'Enabled'}")
+    logger.info(f"Streaming: {'Enabled' if args.stream else 'Disabled'}")
 
     result_dir = run_benchmark(
         traffic_pattern=args.pattern,
@@ -1101,6 +1345,7 @@ def main():
         algorithms=algorithms_to_test,
         strict_mode=args.strict,
         skip_warmup=args.no_warmup,
+        streaming_mode=args.stream,
     )
 
     if result_dir:
